@@ -1,0 +1,9 @@
+model: dme.amf
+
+counts:
+node 2
+
+links:
+
+node0 -> node1
+node1 -> node0

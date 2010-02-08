@@ -1,0 +1,21 @@
+#
+# dpp.topo
+#
+# describes the initial system instance
+# for dining philosophers protocol
+#
+
+# corresponding automata file
+model: dpp.amf
+
+# simple process counts
+counts:
+
+diner 2
+
+# explicit links between processes
+links:
+
+# simple ring
+diner 0 -> diner 1
+diner 1 -> diner 0

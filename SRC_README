@@ -1,0 +1,51 @@
+SRC_README
+------
+
+SRC_README		        this file
+golok.scm		          program entry point
+find-k.scm		        top-level algorithm for cut-off as described in motivating paper
+datatypes.scm		      definitions of behavioral automata and general utilities
+topo-datatypes.scm    topology parsing and manipulation
+parser.scm		        protocol parsing
+model-builder.scm	    oneE and sysN model generation
+search.scm            checks a single system instance for simulation of a 1e model
+lookup-table.scm	    all conversions and mappings for state generation
+
+DEPENDENCIES
+------------
+PLT Scheme v4.2 or higher
+
+AUTHOR
+------
+David Samuelson
+sralmai@gmail.com
+
+ChangeLog
+---------
+See README
+
+COPYING/LICENSE
+---------------
+Copyright (C) 2009, Iowa State University of Science and Technology. All rights reserved.
+
+The Golok framework is available for free for non-profit research and
+educational purposes. For commercial licensing please contact Hridesh Rajan by
+sending an e-mail to hridesh@cs.iastate.edu. The compiler, tools, libraries and
+sources are licensed according to the following license: Permission is hereby
+granted, free of charge, to any person obtaining a copy of this software and
+associated documentation files (the "Software") for non-profit research and
+educational purposes, to use this Software subject to the following conditions:
+The above copyright notice and this permission notice shall be included in all
+copies or substantial portions of the Software. THE SOFTWARE IS PROVIDED "AS
+IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLIED, INCLUDING BUT NOT
+LIMITED TO THE WARRANTIES OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE
+AND NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE
+LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF
+CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE
+SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
+
+BUGS
+----
+None known.
+
+Please contact the author with a description of the problem if you discover a bug.

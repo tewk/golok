@@ -1,0 +1,32 @@
+#
+# gen-DME.amf 
+#
+#
+process node {
+RCV:	[ Idle,  token ] -> [ Ncs ,  choose ]
+SND:	[ Start, epsilon ] -> [ Idle ,  token ]
+PASS:	[ Ncs, choose ] -> [ Idle , token ]
+ENTER:	[ Ncs , choose ] -> [ Cs , in ]
+LEAVE:	[ Cs, in ] -> [ Idle , token ]
+
+}
+
+addition-rule plain-add {
+  require: node y -> node 0
+  create: node x
+  remove: var y -> node 0
+  add: var y -> var x
+  add: var x -> node 0
+}
+
+topology {
+	( node, token, lpeer)
+	( node, in, self)
+	( node, choose, self)
+}
+
+initial-config {
+ ( node 0 SND )
+}
+
+kernel = dme.topo

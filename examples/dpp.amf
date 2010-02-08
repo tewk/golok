@@ -1,0 +1,64 @@
+#
+# dpp.amf
+#
+# behavioral automata for dining philosophers protocol
+#
+# (for golok v1.2.0)
+#
+
+process diner {
+  BEGIN: [init, epsilon ] -> [ not-eating, begin ]
+	LFT: [ not-eating, begin ] -> [wait-left, ask_left]
+	LFT_FREE_NE: [ not-eating, ask_left] -> [not-eating, left_free]
+	LFT_FREE_WL: [ wait-left, ask_left] -> [ wait-left, left_free]
+	LFT_BUSY_WR: [ wait-right, ask_left] -> [wait-right, left_taken]
+	LFT_BUSY_EAT: [ eat, ask_left ] -> [eat, left_taken]
+	LFT_REASK: [wait-left, left_taken ] -> [wait-left, ask_left]
+	RIGHT: [wait-left, left_free] -> [wait-right, ask_right]
+	RIGHT_FREE_NE: [not-eating, ask_right] -> [not-eating, right_free]
+	RIGHT_FREE_WL: [ wait-left, ask_right] -> [ wait-left, right_free]
+	RIGHT_BUSY_WR: [ wait-right, ask_right] -> [wait-right, right_taken]
+	RIGHT_BUSY_EAT: [ eat, ask_right ] -> [eat, right_taken]
+	RIGHT_REASK: [ wait-right, right_taken] -> [wait-right, ask_right]
+	EAT: [wait-right, right_free] -> [eat, rel_forks]
+	EAT_DONE: [eat, rel_forks] -> [not-eating, begin]
+}
+
+addition-rule add-one {
+  create: diner x
+  require: diner y -> diner 0
+  remove: var y -> diner 0
+  add: var y -> var x
+  add: var x -> diner 0
+}
+
+topology {
+# (begin, i, i)
+(diner, begin, self)
+
+#	(ask_left, i, i - 1)
+(diner, ask_left, rpeer)
+
+#	(left_taken, i , i + 1)
+(diner, left_taken, lpeer)
+
+# (left_free, i, i + 1)
+(diner, left_free, lpeer)
+
+#	(ask_right, i, i + 1) 
+(diner, ask_right, lpeer)
+
+#	(right_taken, i , i -1 )
+(diner, right_taken, rpeer)
+
+#	(right_free, i, i -1)
+(diner, right_free, rpeer)
+
+#	(rel_forks, i, i)
+(diner, rel_forks, self)
+}
+
+initial-config {
+}
+
+kernel = dpp.topo

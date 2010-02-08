@@ -1,0 +1,54 @@
+#
+# SpinLock.amf
+#
+# automata file for Spin Lock
+#
+# David Samuelson
+# August 4, 2009
+#
+
+process thread {
+START: [initial, epsilon ] -> [ Start, begin ]
+REQUEST: [ Start, begin ] -> [Waiting, req ]
+REJECTED: [Waiting, nack ] -> [Waiting, req ]
+ACCEPTED: [Waiting, ack ] -> [Has_Object, in ]
+RELEASING: [Has_Object, in ] -> [Start, rel ]
+
+}
+
+process object {
+REQ_FREE: [NB, req ] -> [ B, ack ]
+REQ_BUSY: [B, req ] -> [ B, nack]
+RCV_REL: [B, rel ] -> [NB, begin]
+
+}
+
+addition-rule add-thread {
+  create: thread x
+  foreach object y 
+  {
+   add: var x -- var y 
+  }
+}
+
+addition-rule add-object {
+  create: object x
+  foreach thread y {
+    add: var x -- var y
+  }
+}
+
+topology {
+  (object, req, peer)
+  (object, rel, peer)
+  (thread, in, self)
+  (thread, ack, peer)
+  (thread, nack, peer)
+  (thread, begin, peer)
+  (thread, begin, self)
+}
+
+initial-config {
+}
+
+kernel = SpinLock.topo

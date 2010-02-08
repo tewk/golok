@@ -1,0 +1,123 @@
+#
+# Right-Left Dining Philosophers Protocol
+#
+
+
+# this diner type picks up left fork first
+process left-diner {
+  LFT-START: [ init, epsilon ] -> [not-eating, begin]
+	LFT: [ not-eating, begin] -> [wait-left, ask-left2]
+	LFT-REASK: [wait-left, left-taken ] -> [wait-left, ask-left2]
+
+	LFT-FREE-NE: [ not-eating, ask-left] -> [not-eating, left-free2]
+	LFT-FREE-WL: [ wait-left, ask-left] -> [ wait-left, left-free2]
+	LFT-BUSY-WR: [ wait-right, ask-left] -> [wait-right, left-taken2]
+	LFT-BUSY-EAT: [ eat, ask-left] -> [eat, left-taken2]
+
+	RIGHT: [wait-left, left-free] -> [wait-right, ask-right2]
+	RIGHT-REASK: [ wait-right, right-taken] -> [wait-right, ask-right2]
+
+	RIGHT-FREE-NE: [not-eating, ask-right] -> [not-eating, right-free2]
+	RIGHT-FREE-WL: [ wait-left, ask-right] -> [ wait-left, right-free2]
+	RIGHT-BUSY-WR: [ wait-right, ask-right] -> [wait-right, right-taken2]
+	RIGHT-BUSY-EAT: [ eat, ask-right ] -> [eat, right-taken2]
+
+	EAT: [wait-right, right-free] -> [eat, rel-forks]
+	EAT-DONE: [eat, rel-forks] -> [not-eating, begin]
+}
+
+# this diner type picks up right fork first
+process right-diner {
+  RIGHT-START2: [init, epsilon ] -> [ not-eating, begin2]
+	RIGHT2: [ not-eating, begin2] -> [wait-right, ask-right]
+	RIGHT-REASK2: [ wait-right, right-taken2] -> [wait-right, ask-right]
+
+	RIGHT-FREE-NE2: [not-eating, ask-right2] -> [not-eating, right-free]
+	RIGHT-FREE-WR2: [ wait-right, ask-right2] -> [wait-right, right-free]
+	RIGHT-FREE-WL2: [ wait-left, ask-right2] -> [ wait-left, right-free]
+	RIGHT-BUSY-EAT2: [ eat, ask-right2] -> [eat, right-taken]
+
+	LFT2: [ wait-right, right-free2] -> [wait-left, ask-left]
+	LFT-REASK2: [wait-left, left-taken2] -> [wait-left, ask-left]
+
+	LFT-FREE-NE2: [ not-eating, ask-left2] -> [not-eating, left-free]
+	LFT-BUSY-WL2: [ wait-left, ask-left2] -> [ wait-left, left-taken]
+	LFT-BUSY-WR2: [ wait-right, ask-left2] -> [wait-right, left-taken]
+	LFT-BUSY-EAT2: [ eat, ask-left2] -> [eat, left-taken]
+  
+	EAT2: [wait-left, left-free2] -> [eat, rel-forks2]
+	EAT-DONE2: [eat, rel-forks2] -> [not-eating, begin2]
+}
+
+# add another left and right diner into the ring
+addition-rule add-two {
+      create: left-diner x
+      create: right-diner y
+      require: right-diner z -> left-diner 0
+      remove: var z -> left-diner 0
+      add: var z -> var x
+      add: var x -> var y
+      add: var y -> left-diner 0
+}
+
+topology {
+# the general format is:
+#
+# ( process-type, message, link-position )
+#
+
+#	(ask-left, i_diner, i-1_diner) 
+#
+# this first rule means
+# a left-diner process can receive an 
+# ask-left message from is right peer
+#
+# (see lr-dpp.topo for the meaning of 
+# right peer)
+    (left-diner, ask-left, rpeer)
+    (right-diner, ask-left2, rpeer)
+    
+#	(left-taken, i_diner, i+1_diner)
+    (left-diner, left-taken, lpeer)
+    (right-diner, left-taken2, lpeer)
+
+#	(left-free, i_diner, i+1_diner)
+    (left-diner, left-free, lpeer)
+    (right-diner, left-free2, lpeer)
+
+#	(ask-right, i_diner, i+1_diner)
+    (left-diner, ask-right, lpeer)
+    (right-diner, ask-right2, lpeer)
+
+#	(right-taken, i_diner, i-1_diner)
+    (left-diner, right-taken, rpeer)
+    (right-diner, right-taken2, rpeer)
+
+#	(right-free, i_diner, i-1_diner)
+    (left-diner, right-free, rpeer)
+    (right-diner, right-free2, rpeer)
+
+#	(rel-forks, i_diner, i_diner)
+    (left-diner, rel-forks, self)
+    (right-diner, rel-forks2, self)
+
+# (self start messages)
+    (left-diner, begin, self)
+    (right-diner, begin2, self)
+}
+
+# no special configuration
+#
+# all left processes start in the first listed 
+# left process state 
+# (init in the automaton LFT-START)
+#
+# and 
+#
+# all right processes start in the first listed
+# right process state
+# (init in the automaton RIGHT-START)
+initial-config {
+}
+
+kernel = lr-dpp.topo

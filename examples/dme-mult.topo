@@ -1,0 +1,12 @@
+model: dme-mult.amf
+
+counts:
+forward 2
+critical 2
+
+links:
+
+critical0 -> forward0
+forward0 -> critical1
+critical1 -> forward1
+forward1 -> critical0

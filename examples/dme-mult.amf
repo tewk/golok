@@ -1,0 +1,43 @@
+#
+# dme-multi.amf 
+#
+# implementation of distributed mutual exclusion with
+# "normal" nodes and pass nodes (as in "Automating Cut-off..")
+#
+#
+process forward {
+IDLE: [ Idle, token] -> [ Idle, token]
+SND: [Start, epsilon] -> [Idle, token]
+}
+
+process critical {
+ENTER:	[ Idle,  token ] -> [ Cs , in ]
+LEAVE:	[ Cs , in ] -> [ Idle , token ]
+
+}
+
+# insert two new elements (a pass and a node) into the ring
+addition-rule plain-add {
+  require: forward a -> critical 0
+
+  create: critical x
+  create: forward y
+
+  remove: var a -> critical 0
+
+  add: var a -> var x
+  add: var x -> var y
+  add: var y -> critical 0
+}
+
+topology {
+	( critical, token, lpeer)
+	( critical, in, self)
+  ( forward, token, lpeer)
+}
+
+initial-config {
+ ( forward 0 SND )
+}
+
+kernel = dme-mult.topo
