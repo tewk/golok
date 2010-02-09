@@ -1,0 +1,41 @@
+#
+# milners.amf: Milner's Scheduler Protocol
+#
+
+process scheduler {
+
+# Forward the token and start computing
+FORWARD: 	[begin, token]      -> [task-run, compute]
+
+# Initial automaton
+INIT:  	[Start, epsilon]      -> [begin, token]
+
+# Receive token before computation
+WAIT_TKN:      [task-run, token]     -> [task-wtoken, compute]
+WAIT_TSK:      [task-wtoken, compute]-> [begin, token]
+
+# Finish task before receiving token
+TASK_DONE: 	[task-run, compute]   -> [wait-token, token]
+RESTART: 	[wait-token, token]   -> [begin, token]
+
+}
+
+addition-rule plain-add {
+  require: scheduler y -> scheduler 0
+  create: scheduler x
+  remove: var y -> scheduler 0
+  add: var y -> var x
+  add: var x -> scheduler 0
+}
+
+topology {
+ (scheduler,token,peer)
+ (scheduler,compute,self)
+}
+
+initial-config{
+ ( scheduler 0 INIT )
+}
+
+kernel = milners.topo
+

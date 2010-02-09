@@ -1,0 +1,10 @@
+model: milners.amf
+
+counts:
+scheduler 2
+
+links:
+
+scheduler0 -> scheduler1
+scheduler1 -> scheduler0
+
