@@ -20,7 +20,10 @@
   (define max-t #f)
 
   ; write out oneE models
-  (define dump-1E #t)
+  (define dump-1E #f)
+
+  ; write out system models
+  (define dump-sys #f)
 
   ; when searching through system state space 
   ; for first simulating state, use dfs 
@@ -36,8 +39,8 @@
   ; just dump the model at a particular depth
   (define dump #f)
 
-  ; output directory -- if not defined by command-line, defaults to amf directory
-  (define output-directory #f)
+  ; output directory
+  (define output-directory "output")
 
   ; fast forward (skip) searching n levels of bfs tree
   ; TODO: not implemented
@@ -68,7 +71,8 @@ be a positive number, given" num)))]
                            (if (or (<= 0 x) (<= x 5))
                                (set! debug x) (raise-user-error "debug level must be between 0 and 5 inclusive, given " num)))]
 
-     [("--no-1e") "suppress output of 1e models" (set! dump-1E #f)]
+     [("--1e") "dump 1e models as dot files" (set! dump-1E #t)]
+     [("--sys") "dump simulating subsystem models as dot files" (set! dump-sys #t)]
      [("-o" "--output-dir") dir "Set output directory (default is input directory)." (if (directory-exists? dir) (set! output-directory dir) (raise-user-error "The specified output directory does not exist!"))]
     [("--dfs") "Use depth first search for enumerating system states (BFS is default)" (set! dfs #t)]
     [("--dump") x "Dump the model up to passed depth if no solution found" (set! dump (string->number x))]
@@ -79,4 +83,4 @@ be a positive number, given" num)))]
 
      #:args (amf-file)  amf-file ))
  
-(find-k amf-file (list debug max-t dump-1E output-directory dfs ring start-depth stop-depth process-type star dump))
+(find-k amf-file (list debug max-t dump-1E dump-sys output-directory dfs ring start-depth stop-depth process-type star dump))

@@ -58,6 +58,8 @@
   ;; write out all 1E models
   (define dump-1E #f)
 
+  (define dump-sys #f)
+
   (define dfs #f)
 
   (define ring #f)
@@ -80,14 +82,15 @@
            (set! debug (car arg-list))
            (set! max-secs (cadr arg-list))
            (set! dump-1E (caddr arg-list))
-           (set! output-directory (cadddr arg-list))
-           (set! dfs (fifth arg-list))
-           (set! ring (sixth arg-list))
-           (set! start-depth (seventh arg-list))
-           (set! stop-depth (eighth arg-list))
-           (set! process-type (ninth arg-list))
-           (set! star (tenth arg-list))
-           (set! dump (list-ref arg-list 10)))))
+           (set! dump-sys (cadddr arg-list))
+           (set! output-directory (list-ref arg-list 4))
+           (set! dfs (list-ref arg-list 5))
+           (set! ring (list-ref arg-list 6))
+           (set! start-depth (list-ref arg-list 7))
+           (set! stop-depth (list-ref arg-list 8))
+           (set! process-type (list-ref arg-list 9))
+           (set! star (list-ref arg-list 10))
+           (set! dump (list-ref arg-list 11)))))
 
 ;;; internals ;;;
 
@@ -153,9 +156,11 @@
             (let* ([processes (protocol-process-names prot)]
                    [proc-type (list-ref processes x)] 
                    [proc-mask (remove proc-type processes)])
-              (model2dot (find-solution x)
-				              (string-append output-directory "/" (symbol->string proc-type) "-sys.dot")
-                      proc-mask)))
+              (if dump-sys
+                  (model2dot (find-solution x)
+				              (string-append output-directory "/" (symbol->string proc-type) "-sys.dot") proc-mask)
+                  (find-solution x))))
+                      
 
           ; if only checking a single process type, find its index number and return a singleton list
 		      (if process-type
@@ -171,12 +176,14 @@
 
   (define dump-solution
     (lambda ()
-      (let ([output-name (string-append output-directory "/" "final-result.topo")])
+      (let ([output-name (string-append output-directory "/" (strip-folder base-name) "-cutoff.topo")])
         (begin
           (topology->file k output-name)
           (display-ln "The cut-off system has " (topology->string k) " processes.")
-          (display-ln "Please see " output-name " for system configuration")
-          (display-ln "and <process names>-sys.dot for simulating paths.")))))
+          (display-ln "see " output-name " for system configuration")
+          (if dump-sys  
+            (display-ln "and <process names>-sys.dot for simulating paths.")
+            (void))))))
 
   ;; TODO: clean up find-solution and find-solution-rec
   (define find-solution
@@ -273,3 +280,19 @@
             (display-ln "Checked maximum instance size " max-k " and did not find a simulation. Quitting...")
             (display-ln "Hit time limit of " max-secs" seconds without finding a simulation. (Actual time was " secs" seconds.) Quitting..."))
         (exit))))
+
+; Remove all parts before and including the last '/'
+;
+; (string?) -> (string?)
+(define strip-folder
+  (lambda (x)
+    (let ([rev-chars (reverse (string->list x))])
+      (list->string (reverse (strip-folder-rec rev-chars))))))
+
+; (list-of char?) -> (list-of char?)
+(define strip-folder-rec
+  (lambda (x)
+     (cond
+        ((null? x) '())
+        ((or (eq? (car x) #\/) (eq? (car x) #\\)) '())
+        (#t (cons (car x) (strip-folder-rec (cdr x)))))))
