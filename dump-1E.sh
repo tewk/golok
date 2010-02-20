@@ -1,21 +1,21 @@
 #!/usr/bin/env mzscheme
 #lang scheme
 
-#
-# dump-1e.sh
-#
-# Dump the 1e models from an amf description to GraphViz source files.
-#
-# Usage:
-#       ./dump-1e.sh <amf>
-#
-# (places dot source files in the "output" directory)
-#
-# Example:
-#       ./dump-1e.sh examples/dme.amf
-#
-# creates the 1e model for the distributed mutual exclusion protocol
-#
+;
+; dump-1e.sh
+;
+; Dump the 1e models from an amf description to GraphViz source files.
+;
+; Usage:
+;       ./dump-1e.sh <amf>
+;
+; (places dot source files in the "output" directory)
+;
+; Example:
+;       ./dump-1e.sh examples/dme.amf
+;
+; creates the 1e model for the distributed mutual exclusion protocol
+;
 
 (require scheme/system)
 
@@ -37,7 +37,7 @@
 ; protocol and topo to dump
 (define prot (parse-amf-file prot_name))
 
-(define-values (tt mb2) (build-oneEmodel-builder-new prot))
+(define-values (tt mb2) (build-oneEmodel-builder prot))
 
 (display-ln (mb2 (car (protocol-process-names prot))))
 

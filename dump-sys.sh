@@ -1,21 +1,22 @@
 #!/usr/bin/env mzscheme
+
 #lang scheme
 
-#
-# dump-sys.sh
-#
-# Dump a system instance to file.
-#
-# Usage:
-#       ./dump-1e.sh <amf> <topo>
-#
-# (places dot source files in the "output" directory)
-#
-# Example:
-#        ./dump-1e.sh examples/lr-dpp.amf examples/lr-dpp-33.topo
-#
-# builds the lr-dpp model with 3 left and 3 right philosoophers
-#
+;
+; dump-sys.sh
+;
+; Dump a system instance to file.
+;
+; Usage:
+;       ./dump-1e.sh <amf> <topo>
+;
+; (places dot source files in the "output" directory)
+;
+; Example:
+;        ./dump-1e.sh examples/lr-dpp.amf examples/lr-dpp-33.topo
+;
+; builds the lr-dpp model with 3 left and 3 right philosoophers
+;
 
 
 (require scheme/system)
@@ -53,7 +54,7 @@
 (define prot (parse-amf-file amf-name))
 (define topo (file->topology topo-name))
 
-(define-values (lt mb) (build-oneEmodel-builder-new prot))
+(define-values (lt mb) (build-oneEmodel-builder prot))
 
 (debug-lookup-table lt)
 
