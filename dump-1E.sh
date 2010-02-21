@@ -39,9 +39,7 @@
 
 (define-values (tt mb2) (build-oneEmodel-builder prot))
 
-(display-ln (mb2 (car (protocol-process-names prot))))
-
 (for-each (lambda (x)
           (model2dot (mb2 x) (string-append output-directory "dump-1E-" 
-                            (symbol->string x) ".dot")))
+                            (symbol->string x) ".dot") #:show-buf #f))
                              (protocol-process-names prot))

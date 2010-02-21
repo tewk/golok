@@ -163,7 +163,7 @@
         (set! proc-type-id (proc->proc-id proc-type lt))
         (set! other-mask-ids (map (lambda (x) (proc->proc-id x lt)) other-mask))
 
-        (let-values ([(fresh-tt builder) (build-oneEmodel-builder-new prot)])
+        (let-values ([(fresh-tt builder) (build-oneEmodel-builder prot)])
           (set! oneE (model-mdl (builder proc-type))))
         
         ; debugging messages

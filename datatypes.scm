@@ -47,11 +47,18 @@
          item-index
          
          ;; global variables
-         eps) ; keyword for no input/output msg
+         eps ; keyword for no input/output msg
+         tau ; keyword for 1e transitions between automata
+          )
          
 
 ;;!!! GLOBAL MAGIC VARIABLES !!!
+
+; no input transition
 (define eps 'epsilon)
+
+; fake linking message
+(define tau 'tau)
 
 ;;;;;;;;;;;;;;;;;;;;;;;;; datatypes ;;;;;;;;;;;;;;;;;;;;;;;;
 

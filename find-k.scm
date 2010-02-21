@@ -191,7 +191,7 @@
       (let* ([names (protocol-process-names prot)]
              [name (list-ref names id)]
              [mask (remove name names)])
-        (let-values ([(tt oneE-builder) (build-oneEmodel-builder-new prot)])
+        (let-values ([(tt oneE-builder) (build-oneEmodel-builder prot)])
           (let ([dummy0 (if dump-1E (model2dot (oneE-builder name)
                       (string-append output-directory "/" (symbol->string name) "-1E.dot") #:show-buf #f) (void))])
         (let-values ([(soln data) (search prot k name dfs 

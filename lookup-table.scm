@@ -58,7 +58,7 @@
 ;; magic internal number
 ;;
 ;; (process-state / state-mod) = process-type 
-(define state-mod 64)
+(define state-mod 128)
 
 ; automata: vector of automata
 ; refs: corresponding vector of next nodes (by index)
@@ -83,15 +83,38 @@
 ;;
 ;; topology is what is returned from instantiate-protocol
 ;;
-;; ((list-of automaton) topology) -> (lookup-table)
+;; ((list-of automaton)) -> (lookup-table)
 ;;
 (define create-lookup-table
+  (lambda (automata [for-1e? #f])
+    (if for-1e? (create-1e-lookup-table automata)
+                (create-system-lookup-table automata))))
+
+;;
+;; create a lookup table (linking for 1e model)
+;;
+;; ((list-of automaton)) -> (lookup-table)
+;;
+(define create-1e-lookup-table
+  (lambda (automata)
+    (let* ([proc-map (get-processes automata)]
+           [auts-map (get-auts-map automata proc-map (get-simple-auts automata))]
+           [msgs-map (get-msgs automata)]
+           [links (create-1e-linking automata auts-map msgs-map)])
+      (make-lookup-table links auts-map (reverse-map auts-map) msgs-map (reverse-map msgs-map)
+                                                    proc-map (reverse-map proc-map)))))
+;;
+;; create a lookup table (linking for system states)
+;;
+;; ((list-of automaton)) -> (lookup-table)
+;;
+(define create-system-lookup-table
   (lambda (automata)
     (let* ([proc-map (get-processes automata)]
             ; create a mapping from process-name and state to create a unique state ids
            [states-map (get-states-map automata proc-map (get-simple-states automata))]
            [msgs-map (get-msgs automata)]
-           [links (create-linking automata states-map msgs-map)])
+           [links (create-sys-linking automata states-map msgs-map)])
       (make-lookup-table links states-map (reverse-map states-map) msgs-map (reverse-map msgs-map) proc-map (reverse-map proc-map)))))
 
 ;; returns a hash-map with
@@ -114,6 +137,32 @@
       table)))
 
 ;;
+;; create a hashmap with keys:
+;;                        (vector symbol? symbol? boolean?)
+;;                    where the first symbol is process name, second is automaton name, and third is got message?
+;;                                                                                    (equivalently, state 1 or 2)
+;;
+;;                    values are:
+;;                          integer?
+;;                      (a unique id for each automaton+state)
+;; 
+;;
+(define (get-auts-map automata proc-map simple-auts-map)
+  (let ([table (make-hash)])
+    (begin
+      (for-each (lambda (x)
+                  (let ([proc-id (hash-ref proc-map (automaton-proc-type x))]
+                        [aut-id (hash-ref simple-auts-map (automaton-name x))])
+                    (begin
+                      (add-to! table (vector (automaton-proc-type x) (automaton-name x) #f)
+                                              (+ (* state-mod proc-id) (* 2 aut-id)))
+                      (add-to! table (vector (automaton-proc-type x) (automaton-name x) #t)
+                                              (+ (* state-mod proc-id) (add1 (* 2 aut-id)))))))
+                automata)
+      table)))
+                  
+
+;;
 ;; returns the inverse map of passed hash-map (this assumes the map is bijective)
 ;; 
 ;; (hash-map) -> (hash-map)
@@ -125,7 +174,7 @@
         (hash-for-each hm (lambda (x y) (hash-set! hm2 y x)))
         hm2))))
 
-(define create-linking
+(define create-sys-linking
    (lambda (auts states-map msgs-map)
      (let* ([store (make-hash)])
         (begin
@@ -137,6 +186,35 @@
                         (cons-to-hash store (vector s1 in) (vector s2 out))))
                     auts)
            store))))
+
+(define create-1e-linking
+  (lambda (auts auts-map msgs-map)
+    (let* ([store (make-hash)]
+           [tau-id (hash-ref msgs-map tau)])
+      (begin
+          (for-each (lambda (x)
+                       (let ([s1 (hash-ref auts-map (vector (automaton-proc-type x) (automaton-name x) #f))]
+                             [s2 (hash-ref auts-map (vector (automaton-proc-type x) (automaton-name x) #t))]
+                             [in (hash-ref msgs-map (automaton-in-msg x))]
+                             [out (hash-ref msgs-map (automaton-out-msg x))])
+                         (begin
+                            ;; add the labeled transition between the two states of the automaton
+                            (cons-to-hash store (vector s1 in) (vector s2 out))
+                            ;; all all the tau links
+                            (for-each (lambda (y)
+                                (let ([os1 (hash-ref auts-map (vector (automaton-proc-type y)
+                                                                      (automaton-name y) #f))]
+                                      [oim (hash-ref msgs-map (automaton-in-msg y))])
+                                    ;; if this automaton (x)'s output message equals the others (y)'s
+                                    ;; input message, add a tau link
+                                  (if (= out oim)
+                                      (cons-to-hash store (vector s2 tau-id) (vector os1 tau-id))
+                                      ; otherwise, ignore
+                                      (void))))
+                                      auts))))
+                    auts)
+          store))))
+         
               
                               
 
@@ -145,7 +223,7 @@
     (let ([table (make-hash)])
       (begin
         ; add a dummy message for taus with fixed msg-id
-        (add-to! table 'tau -1)
+        (add-to! table tau -2)
         (for-each (lambda (x)
                   (begin
                     (add-to! table (automaton-in-msg x))
@@ -164,6 +242,22 @@
                  auts)
         table))))
 
+;;
+;; Assign each automaton to an integer.
+;;
+(define get-simple-auts
+  (lambda (auts)
+    (let ([table (make-hash)])
+      (begin
+        (for-each (lambda (x)
+                        (add-to! table (automaton-name x)))
+                 auts)
+        table))))
+;;
+;; Add an integer label to all process types.
+;;
+;; ((list-of automaton?) -> (hash-map?)
+;;
 (define get-processes
   (lambda (auts)
     (let ([table (make-hash)])
