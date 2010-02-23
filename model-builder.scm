@@ -185,34 +185,23 @@
       (for-each 
         ; x is state index
         (lambda (x)
-            ; y is a particular transition
-            (for-each
-                (lambda (y) 
-                        ; ends is a list of indices
-                  (let ([ends (collect-endpoints (vector-ref y 3) proc-id model)])
-                      (for-each 
-                         (lambda (z)
-                           (let* ([new-tran (vector-copy y)]
-                                  [entry (vector-ref new-model x)]
-                                  [old-list (vector-ref entry 1)])
-                            (begin
-                              (vector-set! new-tran 3 z)
-                              (vector-set! entry 1 (cons new-tran old-list))
-                              (vector-set! new-model x entry))))
-                          ends)))
-                (filter (lambda (a) (= proc-id (state-id->proc-id (vector-ref a 2)))) 
-                                                      (vector-ref (vector-ref model x) 1))))
+           ; trans is a list of all "collapsed" transitions
+            (let ([trans (remove-duplicates (collect-endpoints x proc-id model))]
+                  [new-entry (vector-ref new-model x)])
+                ;; put the collapsed transitions in the new model
+                (vector-set! new-entry 1 trans)
+                (vector-set! new-model x new-entry)))
          (build-list (vector-length model) values))
 
          ;; return the model
           new-model)))
                     
 
-(define (collect-endpoints to-index proc-id model)
+(define (collect-endpoints start-index proc-id model)
   (let ([ends (make-vector 1 (list))]
         [visit-list (make-hash)])
     (begin
-      (collect-endpoints-rec to-index proc-id model ends visit-list)
+      (collect-endpoints-rec start-index proc-id model ends visit-list)
       (vector-ref ends 0))))
     
 
@@ -220,29 +209,28 @@
   (if (hash-has-key? visited-list to-ind)
           ; if we've been here before, die
           (void)
-      ;; count the out references
-      (let* ([pid-out-ids (map (lambda (x) (vector-ref x 3)) 
-                            (filter (lambda (y) (= proc-id (state-id->proc-id (vector-ref y 2))))
-                                (vector-ref (vector-ref model to-ind) 1)))]
-             [non-pid-out-ids  (map (lambda (x) (vector-ref x 3)) 
-                            (filter (lambda (y) (not (= proc-id (state-id->proc-id (vector-ref y 2)))))
-                                (vector-ref (vector-ref model to-ind) 1)))])
+      ;; count the transitions
+      (let* ([pid-tran (filter (lambda (y) (= proc-id (state-id->proc-id (vector-ref y 2))))
+                                (vector-ref (vector-ref model to-ind) 1))]
+             [non-pid-tran (filter (lambda (y) (not (= proc-id (state-id->proc-id (vector-ref y 2)))))
+                                (vector-ref (vector-ref model to-ind) 1))])
         (begin
           ; mark this index
           (hash-set! visited-list to-ind #t)
         (cond
-          ; if there are no taus from here, just add the index that got us here and die
-          ((null? non-pid-out-ids)
-                      (vector-set! ends 0 (cons to-ind (vector-ref ends 0))))
-          ; if everything is a tau transition, don't add this state, just its children
-          ((null? pid-out-ids)
-                     (for-each (lambda (z) (collect-endpoints-rec z proc-id model ends visited-list)) non-pid-out-ids))
-          ; otherwise, add this state and its children
+          ; if there are no taus from here, just add all these transitions
+          ((null? non-pid-tran)
+                      (vector-set! ends 0 (append pid-tran (vector-ref ends 0))))
+          ; if everything is a tau transition, don't add these transitions, just their children
+          ((null? pid-tran)
+                     (for-each (lambda (z) (collect-endpoints-rec z proc-id model ends visited-list)) 
+                                  (map (lambda (a) (vector-ref a 3)) non-pid-tran)))
+          ; otherwise, add these transitions and their children
           (#t
               (begin
-                  (vector-set! ends 0 (cons to-ind (vector-ref ends 0)))
-                  (for-each (lambda (z) 
-                              (collect-endpoints-rec z proc-id model ends visited-list)) non-pid-out-ids))))))))
+                  (vector-set! ends 0 (append pid-tran (vector-ref ends 0)))
+                     (for-each (lambda (z) (collect-endpoints-rec z proc-id model ends visited-list)) 
+                                  (map (lambda (a) (vector-ref a 3)) non-pid-tran)))))))))
 
 ;;
 ;; (vector?) -> (vector?)
