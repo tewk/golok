@@ -65,6 +65,8 @@
 (define unsat (void))
 
 ;; function which maps a system state to a specific representative (~ is partial order reduction)
+;;
+;; (state? hash-map?) -> (state?)
 (define state->representative (void))
 
 ;; for cutting branches
@@ -121,8 +123,6 @@
                             #:stop [stop-d #f])
     (let-values ([(stepper ss lookup-table topo-hash) (init-stepper prot topo)])
       (begin
-        ; set a bunch of global (to this module) variables
-        (set! start-state ss)
        
         ; TODO: generalize these reductions (and maybe figure them out from the topology)
         (cond 
@@ -142,6 +142,10 @@
           (#t
               (set! state->representative (lambda (x . y) x))))
 
+
+        ; set a bunch of global (to this module) variables
+        (set! start-state (state->representative ss))
+
         ; XXX: cleanup
         (set! lt lookup-table)
         (set! topo-ht topo-hash)
@@ -152,7 +156,25 @@
 
         ; TODO: set up branch pruning
 
-        (set! expand stepper)
+        ;;; add wrapper around the expand function 
+        ;; whicch handles state reduction
+        (set! expand 
+               (lambda (state [proc-mask (list)] [to-todos? #f])
+            (if to-todos?
+                ;; repackage all the todos to have reduces representation
+                (map (lambda (td)
+                        (let ([s1 (state->representative (todo-state td))]
+                              [s2 (state->representative (todo->next-state td))])
+                        (make-todo s1 (todo-msg td)
+                                      (todo-send-id td)
+                                      (todo-recv-id td)
+                                      (todo-cons-state td)
+                                      (todo-msg2 td)
+                                        s2)))
+                        (stepper state proc-mask #t))
+                ;; otherwise, just map all the returned states
+                (map state->representative (stepper state proc-mask)))))
+
         (set! proc-type pt)
         (set! start-aut (state->state-id (vector proc-type (automaton-state1 (process-default-aut (car 
                               (filter (lambda (x) (equal? proc-type (process-name x)))
@@ -208,8 +230,8 @@
             ; otherwise, check children
             (begin  
               (let* ([new-states (filter (lambda (y) (not (hash-has-key? store y)))
-                          (remove-duplicates (map (lambda (x) (state->representative x store))
-                                   (expand state))))]
+                          (remove-duplicates (expand state)))]
+                                   
 
                 ; remove all states that do not have a process of proc-type in the 
                 ; initial state
@@ -301,8 +323,8 @@
         (#t
           (let* ([new-fr (make-hash)]
                 [new-states (filter (lambda (y) (not (hash-has-key? state-space y)))
-                  (remove-duplicates (map (lambda (x) (state->representative x state-space))
-                    (list-of-lists->list (map expand fr)))))]
+                  (remove-duplicates 
+                    (list-of-lists->list (map expand fr))))]
                 ; remove all states that do not have a process of proc-type in the 
                 ; initial state
                 ; (because they cannot possibly simulate)
@@ -404,27 +426,21 @@
  ; return a list of *all* states reachable without using a transition in proc-mask
  ;  (including the passed state)
 (define explode
-  (lambda (state proc-mask [to-todo #f])
+  (lambda (state proc-mask)
     (let* ([collection (make-hash)]
            [fringe (make-hash)])
-      (if to-todo
-      (begin 
-        ; add all start transitions
-        (for-each (lambda (x) (hash-set! fringe x #t)) (expand state proc-mask #t))
-        (hash-map fringe (lambda (x y) (hash-set! collection x y)))
-        (explode-rec collection fringe proc-type #t))
       (begin
         ; add start state to collection and fringe
         (hash-set! fringe state (void))
         (hash-set! collection state (void))
-        (explode-rec collection fringe proc-mask #f))))))
+        (explode-rec collection fringe proc-mask)))))
 
 (define explode-rec
-  (lambda (collection fringe proc-mask to-todo)
-    (let* ([fringe-step (remove-duplicates (list-of-lists->list (hash-map fringe 
-                                       (lambda (x y) (expand 
-                                          (state->representative (if to-todo (todo->next-state x) x) state-space) 
-                                                    proc-mask to-todo)))))]
+  (lambda (collection fringe proc-mask)
+    (let* ([fringe-step (remove-duplicates 
+                            (list-of-lists->list 
+                                  (hash-map fringe 
+                                       (lambda (x y) (expand x proc-mask)))))]
            [new-fringe (make-hash)])
        (begin
           ;; add all new states in fringe-step to new-fringe and collection
@@ -434,7 +450,7 @@
                                             (hash-set! collection x #t)
                                             (hash-set! new-fringe x #t)))) fringe-step)
          (if (= 0 (hash-count new-fringe)) (hash-map collection (lambda (x y) x))
-            (explode-rec collection new-fringe proc-mask to-todo))))))
+            (explode-rec collection new-fringe proc-mask))))))
 
 ; update max-trace
 ;
@@ -530,8 +546,8 @@
                 ; if start-state does not equal the initial state of the proc-type transition,
                 ; then at least one tau transition needed to happen, first
                     (begin
-                      (if (not (equal? start-state (state->representative (todo-state td) db)))
-                          (connect-taus! start-state (todo-state td) db) 
+                      (if (not (equal? start-state (state->representative (todo-state td))))
+                          (connect-taus! start-state (state->representative (todo-state td)) db) 
                           (void))
                       (add-td-to-db! td db)))) (cadr entry)))))
 
@@ -566,7 +582,7 @@
     ; dummy check
     (if  (equal? start-state end-state) (void)
       (let* ([end-db (make-hash)]
-	     [dmy (hash-set! end-db end-state #t)]
+	     [dmy (hash-set! end-db (state->representative end-state) #t)]
              [possibles (remove-duplicates (expand start-state (list proc-type-id) #t))]
                 ; since there *is* a path to the end-state, this ormap always gives a non #f result
                 ;
@@ -580,8 +596,8 @@
 ; (we need to return the first state of final-todo)
 (define connect-taus-rec
   (lambda (init-td final-db db)
-    (let* ([start-state (state->representative (todo-state init-td) db)]
-          [end-state (state->representative (todo->next-state init-td) db)]
+    (let* ([start-state (todo-state init-td)]
+          [end-state (todo->next-state init-td)]
 	  [dmy0 (if (>= debug 4) (display-ln "ctr call:\n\tss: " start-state "\n\tes: " end-state) (void))])
       (if (hash-has-key? final-db end-state)
         (begin
@@ -624,41 +640,72 @@
   (lambda (state mangle)
     (map (lambda (x) (list-ref state x)) mangle)))
 
-; single-map implementation
-; (by default, use the global state-space hash for checking if a
-;       representative is already present)
 ;
-; XXX: This means that state reduction only reduces to a single 
-;       representative if there is already a member of the 
-;       equivalence class in the state-stace.
-;
-;       In other words, when the final solution path is displayed,
-;       it may have system states which belong to the same 
-;       equivalence class, because both of them were generated 
-;       on the fly for searching from a particular system state.
+; maps all states to their rotation with the lowest process ids first
 ;
 ; sz: number of separate process types
 ;
 ; x: system state to check
-; sp: state-space to check against
+;
 (define ring-reducer-init
   (lambda (sz)
-     (lambda (x [sp state-space])
-        (let ([lookup (ormap (lambda (y) (hash-has-key? sp y) y #f)
-                                     (all-rotations x sz))])
-          (if lookup lookup x)))))
+      ; x: state
+      ; y: ignored
+     (lambda (x . y)
+        (car (sort (all-rotations x sz) order-by-number)))))
+
+; x, y are system states
+;
+; returns true if x is "less than" y
+(define (order-by-number x y)
+      ; if x and y were completely equal, just say x is first
+  (if (or (null? x) (null? y)) #t
+    (let ([xs1 (mprocess-state (car x))]
+          [ys1 (mprocess-state (car y))])
+         (cond
+            ((< xs1 ys1) #t)
+            ((> xs1 ys1) #f)
+            ;; states are equal, so compare buffers 
+            (#t 
+               (let* ([xbuf (mprocess-buff (car x))]
+                      [ybuf (mprocess-buff (car y))]
+                      [xlen (length xbuf)]
+                      [ylen (length ybuf)])
+                  (cond
+                    ((< xlen ylen) #t)
+                    ((> xlen ylen) #f)
+                    ;; if message buffers are equal, give up and check the next process
+                    ((equal? xbuf ybuf) 
+                        (order-by-number (cdr x) (cdr y)))
+                    ;; otherwise, the "lower" messages go first
+                    (#t
+                      (which-is-first? xbuf ybuf)))))))))              
+
+
+; like order-by-number, except for simple lists of integers
+;
+; returns true if x < y
+;
+; WARNING: this assumes that x != y and len(x) == len(y)
+(define (which-is-first? x y)
+  (let ([x1 (car x)]
+        [y1 (car y)])
+    (cond
+      ((< x1 y1) #t)
+      ((> x1 y1) #f)
+      (#t (which-is-first? (cdr x) (cdr y))))))
 
 
 ; return a list of all rotations of a state (including the original)
 ; XXX: works only for rings
 (define all-rotations
   (lambda (x sz)
-      (let* ([times (quotient (length x) sz)]
+      (let* ([times (/ (length x) sz)]
               ; pieces should be a list of lists
               ; (of separated process types)
               [pieces (chop-up x times)]
               [rots (map (lambda (y)
-                         (list-of-lists->list
+                          (list-of-lists->list
                           (map
                             (lambda (z)
                              (back-front z y))

@@ -30,9 +30,6 @@
          ; generation-function: (state [proc-mask (list)] [to-todo #f]) -> (list-of next-states)
          init-stepper
          
-         ; struct
-         todo-state
-         
          ; todo->label: (todo) -> (label)
          todo->label
          
@@ -616,7 +613,8 @@
                                  (let* ([ss-id (get-id (state->representative (todo-state z) sp) db)]
                                         [to-id (get-id (state->representative (todo->next-state z) sp) db)])
                                    (add-trans-to-set! (todo-state z) (todo->label to-id z) db)))
-                               (filter (lambda (g) (hash-has-key? db (state->representative (todo->next-state g) sp))) todos)))))
+                               (filter (lambda (g) (and (hash-has-key? db (state->representative (todo->next-state g) sp)) (hash-has-key? db (state->representative (todo-state g) sp)))) todos)))))
+
         (let ([vect (make-vector (hash-count db))])
           (begin
             (hash-for-each db (lambda (x y)
