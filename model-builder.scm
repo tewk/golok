@@ -148,7 +148,6 @@
                 [md (build-model initial-state tt)]
                 [model (hash->model md tt oneE-flag initial-state)]
                 ;; now filter out the taus and all other transition types
-          ; XXX
                 [stripped (strip-taus model (proc->proc-id proc-type tt) tt)]
                 [cleaned-model (reduce-model stripped)])
            (make-model cleaned-model tt)))))))
@@ -166,7 +165,9 @@
 
 (define (strip-taus raw-model proc-id lt)
   (let* ([model (remove-tau-linking raw-model lt)]
-         [new-model (make-vector (vector-length model))])
+         [new-model (make-vector (vector-length model))]
+        ; lookups to compacted model (without "extra" start states)
+         [mapper (make-hash)])
     (begin
       ; rebuild the model (leaving out transitions)
       (for-each (lambda (x)
@@ -180,43 +181,73 @@
                       (vector-set! new-model x new-entry))))
                 (build-list (vector-length new-model) values))
 
-      ; for each state, for each link of type proc-id, point it to the 
-      ; next state which works
-      (for-each 
-        ; x is state index
-        (lambda (x)
-           ; trans is a list of all "collapsed" transitions
-            (let ([trans (remove-duplicates (collect-endpoints x proc-id model))]
-                  [new-entry (vector-ref new-model x)])
-                ;; put the collapsed transitions in the new model
+      ; for each state reachable via non-tau links, add the map
+      (add-elements-rec 0 proc-id model new-model mapper)
+
+         ;; return the compacted new model
+         (compact-model new-model mapper))))
+
+
+;; shrink a model (remove states and correct indexing) given a model and a map of old indices to new indices
+(define (compact-model model mapper)
+  (let ([new-model (make-vector (hash-count mapper))])
+    (begin
+      (hash-for-each mapper 
+        (lambda (x y)
+          (let ([state (vector-ref (vector-ref model x) 0)]
+                [trans (vector-ref (vector-ref model x) 1)]
+                [new-state (make-vector 2)])
+          (begin
+            ;; copy the old state into the new
+            (vector-set! new-state 0 state)
+            ;; change all the next-indices of the transitions
+            ;; add the modified transitions to the state
+            (vector-set! new-state 1 (map (lambda (z) 
+                          (let ([new-tran (vector-copy z)])
+                            (begin
+                             (vector-set! new-tran 3 (hash-ref mapper (vector-ref z 3)))
+                              new-tran))) trans))
+            ;; write the whole thing into the new model
+            (vector-set! new-model y new-state)))))
+        ; return the new model
+        new-model)))
+          
+            
+
+
+(define (add-elements-rec index proc-id model new-model mapper)
+   (if (hash-has-key? mapper index) (void)
+     (let* ([trans (remove-duplicates (collect-endpoints index proc-id model))]
+            [new-entry (vector-ref new-model index)]
+            [size (hash-count mapper)])
+          (begin
                 (vector-set! new-entry 1 trans)
-                (vector-set! new-model x new-entry)))
-         (build-list (vector-length model) values))
+                (vector-set! new-model index new-entry)
+                (hash-set! mapper index size)
+                (for-each 
+                  (lambda (x) (add-elements-rec (vector-ref x 3) proc-id model new-model mapper)) 
+                  trans)))))
 
-         ;; return the model
-          new-model)))
-                    
-
-(define (collect-endpoints start-index proc-id model)
+(define (collect-endpoints state-index proc-id model)
   (let ([ends (make-vector 1 (list))]
         [visit-list (make-hash)])
     (begin
-      (collect-endpoints-rec start-index proc-id model ends visit-list)
+      (collect-endpoints-rec state-index proc-id model ends visit-list)
       (vector-ref ends 0))))
     
 
-(define (collect-endpoints-rec to-ind proc-id model ends visited-list)
-  (if (hash-has-key? visited-list to-ind)
+(define (collect-endpoints-rec state-index proc-id model ends visited-list)
+  (if (hash-has-key? visited-list state-index)
           ; if we've been here before, die
           (void)
       ;; count the transitions
       (let* ([pid-tran (filter (lambda (y) (= proc-id (state-id->proc-id (vector-ref y 2))))
-                                (vector-ref (vector-ref model to-ind) 1))]
+                                (vector-ref (vector-ref model state-index) 1))]
              [non-pid-tran (filter (lambda (y) (not (= proc-id (state-id->proc-id (vector-ref y 2)))))
-                                (vector-ref (vector-ref model to-ind) 1))])
+                                (vector-ref (vector-ref model state-index) 1))])
         (begin
           ; mark this index
-          (hash-set! visited-list to-ind #t)
+          (hash-set! visited-list state-index #t)
         (cond
           ; if there are no taus from here, just add all these transitions
           ((null? non-pid-tran)
