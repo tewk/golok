@@ -151,15 +151,18 @@
 
         (init-internals filename)
 
+       (for-each
+        (lambda (start-aut)
         (for-each 
           (lambda (x)
             (let* ([processes (protocol-process-names prot)]
                    [proc-type (list-ref processes x)] 
                    [proc-mask (remove proc-type processes)])
               (if dump-sys
-                  (model2dot (find-solution x)
-				              (string-append output-directory "/" (symbol->string proc-type) "-sys.dot") proc-mask)
-                  (find-solution x))))
+                  (model2dot (find-solution x start-aut)
+				              (string-append output-directory "/" (symbol->string proc-type) "-from-" 
+                                          (symbol->string (automaton-proc-type start-aut)) "-sys.dot") proc-mask)
+                  (find-solution x start-aut))))
                       
 
           ; if only checking a single process type, find its index number and return a singleton list
@@ -171,7 +174,11 @@
                                 (display-ln "INFO: only checking " process-type " for simulation\n")
                                 (list index))))
               ; otherwise, check all process indices
-              (build-list (length (protocol-process-names prot)) values)))
+              (build-list (length (protocol-process-names prot)) values))))
+
+          ;; collect all automata which take an epsilon in message
+          (filter (lambda (z) (equal? eps (automaton-in-msg z))) (protocol-ba prot)))
+
         (dump-solution))))
 
   (define dump-solution
@@ -187,14 +194,15 @@
 
   ;; TODO: clean up find-solution and find-solution-rec
   (define find-solution
-    (lambda (id)
+    (lambda (id start-aut)
       (let* ([names (protocol-process-names prot)]
              [name (list-ref names id)]
              [mask (remove name names)])
         (let-values ([(tt oneE-builder) (build-oneEmodel-builder prot)])
-          (let ([dummy0 (if dump-1E (model2dot (oneE-builder name)
-                      (string-append output-directory "/" (symbol->string name) "-1E.dot") #:show-buf #f) (void))])
-        (let-values ([(soln data) (search prot k name dfs 
+          (let ([dummy0 (if dump-1E (model2dot (oneE-builder name start-aut)
+                      (string-append output-directory "/" (symbol->string name) "-from-" 
+                                                    (symbol->string (automaton-proc-type start-aut)) "-1e.dot") #:show-buf #f) (void))])
+        (let-values ([(soln data) (search prot k name dfs start-aut
                                                          #:ring ring
                                                          #:dump dump
                                                          #:star star
@@ -203,7 +211,7 @@
         (if soln  
           ; if soln == #t, then data is a model containing the simulating subset of the system
            data
-    (find-solution-rec id names 0 data))))))))
+    (find-solution-rec id start-aut names 0 data))))))))
 
 
 ;; if we try all addition rules and none work, which rule should be applied before looping over them again
@@ -222,7 +230,7 @@
   ; cur_ch: index of the rule to apply
   ; best-trace: integer measure of how close model has come to simulating 1e
 (define find-solution-rec
-  (lambda (id names cur_ch best-trace)
+  (lambda (id start-aut names cur_ch best-trace)
    (let* ([rules (protocol-addition-rules prot)]
           [rule (list-ref (protocol-addition-rules prot) cur_ch)]
           [size (length rules)]
@@ -234,7 +242,7 @@
             (if (>= debug 4) (display-ln "-------\n" "rule " rule " cannot be applied... skipping") (void))
             (find-solution-rec id names (modulo (add1 cur_ch) size) best-trace))
           (let* ([new-k (rule 'apply k)])
-            (let-values ([(soln data) (search prot new-k (list-ref names id) dfs
+            (let-values ([(soln data) (search prot new-k (list-ref names id) dfs start-aut
                                                         #:ring ring
                                                         #:star star
                                                         #:start start-depth
@@ -250,7 +258,7 @@
                 (begin
                     (set! k new-k)
                     (set! made-a-change #t)
-                    (find-solution-rec id names (modulo (+ 1 cur_ch) size) data)))
+                    (find-solution-rec id start-aut names (modulo (+ 1 cur_ch) size) data)))
 
           ; is the the last rule before trying them all again?
           ((= 0 (modulo (+ 1 cur_ch) size))
@@ -259,17 +267,17 @@
                ; clear the flag and continue
                (begin
                   (set! made-a-change #f)
-                  (find-solution-rec id names (modulo (+ 1 cur_ch) size) best-trace))
+                  (find-solution-rec id start-aut names (modulo (+ 1 cur_ch) size) best-trace))
                ; otherwise apply the next rule
                (begin
                   (set! made-a-change #f)
                   (set! k ((list-ref (protocol-addition-rules prot) next-id-to-inc) 'apply k))
                   (set! next-id-to-inc (modulo (+ 1 cur_ch) size))
-                  (find-solution-rec id names (modulo (+ 1 cur_ch) size) best-trace))))
+                  (find-solution-rec id start-aut names (modulo (+ 1 cur_ch) size) best-trace))))
             
 
           ; otherwise just continue to the next rule
-          (#t (find-solution-rec id names (modulo (+ 1 cur_ch) size) best-trace)))))))))
+          (#t (find-solution-rec id start-aut names (modulo (+ 1 cur_ch) size) best-trace)))))))))
 
 
 ; depreciated
