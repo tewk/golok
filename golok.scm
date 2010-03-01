@@ -59,7 +59,7 @@
      #:program (string-append "golok" "-" version)
 
      #:multi
-     [("--star-point") x "partial order reduction for star" (cons (string->symbol x) star)]
+     [("--star-point") x "partial order reduction for star" (set! star (cons (string->symbol x) star))]
   
      #:once-each
      [("-t" "--max-time") num "Specify a maximum execution time in seconds before stopping"

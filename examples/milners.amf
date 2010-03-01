@@ -11,12 +11,14 @@ FORWARD: 	[begin, token]      -> [task-run, compute]
 INIT:  	[Start, epsilon]      -> [begin, token]
 
 # Receive token before computation
-WAIT_TKN:      [task-run, token]     -> [task-wtoken, compute]
-WAIT_TSK:      [task-wtoken, compute]-> [begin, token]
+WAIT_TKN:      [task-run, token]     -> [task-wtoken, send-token]
+
+# and send the token
+WAIT_TSK_START: [send-token, send-token ] -> [task-run, token ]
 
 # Finish task before receiving token
-TASK_DONE: 	[task-run, compute]   -> [wait-token, token]
-RESTART: 	[wait-token, token]   -> [begin, token]
+TASK_DONE: 	[task-run, compute]   -> [wait-token, compute]
+RESTART: 	[wait-token, token]   -> [task-run, token]
 
 }
 
@@ -29,8 +31,9 @@ addition-rule plain-add {
 }
 
 topology {
- (scheduler,token,peer)
+ (scheduler,token,lpeer)
  (scheduler,compute,self)
+ (scheduler,send-token,self)
 }
 
 initial-config{

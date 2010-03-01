@@ -1,4 +1,3 @@
-
 ; search.scm
 ;
 ; Algorithm for checking a system instance for  
@@ -137,10 +136,10 @@
                   (set! state->representative (ring-reducer-init (length (protocol-process-names prot))))))
            ((not (null? s))
                  (begin
-                    (display-ln "STUB: partial order reduction not implemented")
-                    (set! state->representative (lambda (x . y) x))))
+                    (display-ln "INFO: enabling start partial order reduction on " (los->string s))
+                    (set! state->representative (star-reducer-init ss s lookup-table))))
           (#t
-              (set! state->representative (lambda (x . y) x))))
+                  (set! state->representative (lambda (x . y) x))))
 
 
         ; set a bunch of global (to this module) variables
@@ -180,7 +179,7 @@
                               (filter (lambda (x) (equal? proc-type (process-name x)))
                                                 (protocol-processes prot)))))) lt))
         
-        (set! other-mask (remove proc-type (protocol-process-names prot))))
+        (set! other-mask (remove proc-type (protocol-process-names prot)))
 
         (set! proc-type-id (proc->proc-id proc-type lt))
         (set! other-mask-ids (map (lambda (x) (proc->proc-id x lt)) other-mask))
@@ -210,7 +209,7 @@
                 (values #t (search->model result)))
               ; otherwise just return failure
               (#t
-                (values #f max-trace)))))))
+                (values #f max-trace))))))))
 
 (define search-dfs
   (lambda (state)
@@ -546,9 +545,9 @@
                 ; if start-state does not equal the initial state of the proc-type transition,
                 ; then at least one tau transition needed to happen, first
                     (begin
-                      (if (not (equal? start-state (state->representative (todo-state td))))
-                          (connect-taus! start-state (state->representative (todo-state td)) db) 
-                          (void))
+                     (if (not (equal? start-state (todo-state td)))
+                         (connect-taus! start-state (todo-state td) db)
+                         (void))
                       (add-td-to-db! td db)))) (cadr entry)))))
 
 (define add-td-to-db!
@@ -588,7 +587,6 @@
                 ;
                 ; if it *does* return false, there is an error in our search algorithm
              [success? (ormap (lambda (x) (connect-taus-rec x end-db db)) possibles)])
-                                                          
           (if (not success?) (error "there is a bug in search!") (void))))))
 
 ; returns a list or #f: #f on failure or (list todo final-state) 
@@ -654,45 +652,96 @@
      (lambda (x . y)
         (car (sort (all-rotations x sz) order-by-number)))))
 
-; x, y are system states
+;
+;
+;
+;
+(define star-reducer-init
+  (lambda (example-state reducible-elements lt)
+    (let* ([reducible-ids (map (lambda (x) (proc->proc-id x lt)) reducible-elements)]
+           ; chunks is a list of pairs (integer? integer?)
+           ; where (a b)
+           ; means starting at a, b elements can be sorted
+           ; (in other words, the sublist of length b starting at a 
+           ; can be chopped out of the full list, sorted, and put back in)
+           [chunks (map (lambda (x) (list (find-first-rec x example-state 0) (count-number x example-state)))
+                                reducible-ids)])
+          (lambda (z . y) 
+            (reduce-chunks z chunks)))))
+
+(define reduce-chunks
+  (lambda (x chunks)
+    (if (null? chunks) x
+      (let ([start-index (caar chunks)]
+            [len (cadar chunks)])
+      (let-values ([(front mid) (split-at x start-index)])
+        (let-values ([(to-sort back) (split-at mid len)])
+          (reduce-chunks (append front (sort to-sort sort-mprocess) back) (cdr chunks))))))))
+
+;
+; return the first index of the list in which the process-type (parameter integer?) matches (car mprocess)
+; (integer? (list-of mprocess?)) -> (integer?)
+;
+(define find-first-rec
+  (lambda (id ls index)
+    (if (= id (state-id->proc-id (mprocess-state (car ls))))
+        index
+        (find-first-rec id (cdr ls) (add1 index)))))
+
+;
+; return the number of processes in the state of process type id 
+;
+(define count-number
+  (lambda (id st)
+    (length (filter (lambda (x) (= id (state-id->proc-id (mprocess-state x)))) st))))
+
+(define (sort-mprocess x y)
+  (if (> (sort-mprocess-raw x y) 0) #f #t))
+;
+; returns -1, 0, or 1
+; based on ordering of xs1 and ys1
+; (-1 means xs1 < ys1, 0 : xs1 = ys1, 1 :xs1 > ys1)
+(define (sort-mprocess-raw xs1 ys1)
+  (let ([xs1-id (mprocess-state xs1)]
+        [ys1-id (mprocess-state ys1)])
+    (cond
+      ((< xs1-id ys1-id) -1)
+      ((> xs1-id ys1-id) 1)
+      ;; states are equal, so compare buffers 
+      (#t 
+       (let* ([xbuf (mprocess-buff xs1)]
+              [ybuf (mprocess-buff ys1)]
+              [xlen (length xbuf)]
+              [ylen (length ybuf)])
+         (cond
+           ((< xlen ylen) -1)
+           ((> xlen ylen) 1)
+           ((equal? xbuf ybuf) 0)
+           ((which-is-first? xbuf ybuf))))))))
+  
+; x, y are system states (that is, a list of mprocess structs)
 ;
 ; returns true if x is "less than" y
 (define (order-by-number x y)
       ; if x and y were completely equal, just say x is first
   (if (or (null? x) (null? y)) #t
-    (let ([xs1 (mprocess-state (car x))]
-          [ys1 (mprocess-state (car y))])
-         (cond
-            ((< xs1 ys1) #t)
-            ((> xs1 ys1) #f)
-            ;; states are equal, so compare buffers 
-            (#t 
-               (let* ([xbuf (mprocess-buff (car x))]
-                      [ybuf (mprocess-buff (car y))]
-                      [xlen (length xbuf)]
-                      [ylen (length ybuf)])
-                  (cond
-                    ((< xlen ylen) #t)
-                    ((> xlen ylen) #f)
-                    ;; if message buffers are equal, give up and check the next process
-                    ((equal? xbuf ybuf) 
-                        (order-by-number (cdr x) (cdr y)))
-                    ;; otherwise, the "lower" messages go first
-                    (#t
-                      (which-is-first? xbuf ybuf)))))))))              
-
+    (let ([res (sort-mprocess-raw (car x) (car y))])
+      (cond
+        ((= res -1) #t)
+        ((= res 1) #f)
+        (#t (order-by-number (cdr x) (cdr y)))))))
 
 ; like order-by-number, except for simple lists of integers
 ;
-; returns true if x < y
+; returns -1 if x < y
 ;
-; WARNING: this assumes that x != y and len(x) == len(y)
+; WARNING: assumes x and y are non-equal
 (define (which-is-first? x y)
   (let ([x1 (car x)]
         [y1 (car y)])
     (cond
-      ((< x1 y1) #t)
-      ((> x1 y1) #f)
+      ((< x1 y1) -1)
+      ((> x1 y1) 1)
       (#t (which-is-first? (cdr x) (cdr y))))))
 
 
