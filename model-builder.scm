@@ -131,53 +131,28 @@
     (let ([tt (create-lookup-table (protocol-ba prot) #t)])
       (values
        tt
-       (lambda (proc-type initial-aut [verbose #f])
+       (lambda (proc-type [verbose #f])
          (let* ([all-aut (protocol-ba prot)]
                 ; set the global eps-id from the lookup table
-                [dmy (set! eps-id (msg->msg-id eps tt))]
-              ;  [initial-aut
-              ;   (let* ([record (filter (lambda (x) (and
-              ;                                       (equal? (car x) proc-type)
-              ;                                       (= (cadr x) 0))) (protocol-start-conf prot))])
-              ;     (if (not (null? record)) (caddar record) (car (filter (lambda (z) (equal? proc-type (automaton-proc-type z))) all-aut))))]
+                [dmyyy (set! eps-id (msg->msg-id eps tt))]
+                [initial-aut
+                 (let* ([record (filter (lambda (x) (and
+                                                     (equal? (car x) proc-type)
+                                                     (= (cadr x) 0))) (protocol-start-conf prot))])
+                   (if (not (null? record)) (caddar record) (car (filter (lambda (z) (equal? proc-type (automaton-proc-type z))) all-aut))))]
                 [state-id (state->state-id (vector (automaton-proc-type initial-aut) (automaton-name initial-aut) #f) tt)]
-                [initial-state (list (state->process state-id))]
-                                   
-            ;    [initial-state (if (eq? (automaton-in-msg initial-aut) eps) 
-            ;                       (collect-all-eps initial-aut all-aut tt) 
+                [initial-state  (list (state->process state-id))]
+         ;       [initial-state (if (eq? (automaton-in-msg initial-aut) eps) 
+         ;                          (collect-all-eps initial-aut all-aut tt) 
+         ;                          (list (state->process state-id)))]
                 [dummy2 (if verbose (display-ln "Building oneEmodel...") (void))]
                 [md (build-model initial-state tt)]
                 [model (hash->model md tt oneE-flag initial-state)]
                 ;; now filter out the taus and all other transition types
                 [stripped (strip-taus model (proc->proc-id proc-type tt) tt)]
-                ;; remove all duplicate paths
-                [cleaned-model (reduce-model stripped)]
-                ;; remove lonely nodes (without transitions to or from)
-                [finished (compactify cleaned-model)])
-           (make-model finished tt)))))))
+                [cleaned-model (reduce-model stripped)])
+           (make-model cleaned-model tt)))))))
 
-
-;; simple front-end to compact-model 
-(define (compactify model)
-  (let ([mapper (make-hash)])
-    (begin
-      ; mark all reachable elements
-      (mark-elements-rec model 0 mapper)
-      (compact-model model mapper))))
-
-
-
-(define (mark-elements-rec model index mapper)
-  (let ([size (hash-count mapper)])
-   (if (hash-has-key? mapper index)
-      (void)
-      (begin
-        (hash-set! mapper index size)
-        ;; add all children
-        (for-each (lambda (x) (mark-elements-rec model x mapper))
-              (map (lambda (z) (vector-ref z 3)) (vector-ref (vector-ref model index) 1)))))))
-
-      
 ;;
 ;; strip-taus
 ;;

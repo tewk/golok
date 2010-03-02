@@ -115,8 +115,7 @@
   ; star - (list-of process-types of which system states are equivalent when swapped around)
   ; start - integer-depth | #f
   ; stop - integer-depth | #f
-  (lambda (prot topo pt dfs oneE-start-aut
-                            #:dump [dump #f] 
+  (lambda (prot topo pt dfs #:dump [dump #f] 
                             #:ring [r #f]
                             #:star [s (list)]
                             #:start [start-d #f]
@@ -186,7 +185,7 @@
         (set! other-mask-ids (map (lambda (x) (proc->proc-id x lt)) other-mask))
 
         (let-values ([(fresh-tt builder) (build-oneEmodel-builder prot)])
-          (set! oneE (model-mdl (builder proc-type oneE-start-aut))))
+          (set! oneE (model-mdl (builder proc-type))))
         
         ; debugging messages
         (if (>= debug 2) (display-ln "checking " (topology->string topo) " for simulation of "
