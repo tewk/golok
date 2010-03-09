@@ -75,6 +75,14 @@
   ; dump depth
   (define dump #f)
 
+  ; list of non-paramterized process names
+  (define npp (list))
+
+;; TODO: figure out if there is any better way for 
+;;        passing arguments across modules
+;;        (while avoiding circular "requires")
+;;        because this is ugly as sin
+;;
 ;; set globals passed via command line arguments
   (define init-clo 
     (lambda (arg-list)
@@ -90,7 +98,8 @@
            (set! stop-depth (list-ref arg-list 8))
            (set! process-type (list-ref arg-list 9))
            (set! star (list-ref arg-list 10))
-           (set! dump (list-ref arg-list 11)))))
+           (set! dump (list-ref arg-list 11))
+           (set! npp (list-ref arg-list 12)))))
 
 ;;; internals ;;;
 
@@ -156,33 +165,34 @@
          [starts (if process-type
               (let* ([names (protocol-process-names prot)]
                      [index (item-index process-type names)])
-                  (if (< index 0) (raise-user-error "Invalid process index ~s" process-type)
+                  (cond  
+                      ((< index 0) (raise-user-error "Invalid process index ~s" process-type))
+                      (#t
                           (begin
                                 (display-ln "INFO: only checking " process-type " for simulation\n")
-                                (list index))))
+                                (list index)))))
               ; otherwise, check all process indices
               (build-list (length (protocol-process-names prot)) values))])
         
-       (for-each
-          (lambda (start-aut)
+            ;;
+            ;; TODO: clean this up... should 
+            ;;
             (for-each 
               (lambda (x)
                 (let* ([processes (protocol-process-names prot)]
-                        [proc-type (list-ref processes x)] 
+                        [proc-type (automaton-proc-type x)] 
                       [proc-mask (remove proc-type processes)])
                     (cond
+                      ; if this is a non-parameterized process type, skip
+                      ((member (automaton-proc-type x) npp) (void))
                       ; if this is an epsilon initiated process and not starting from its start, skip
-                      ((and (member (list-ref processes x) (map automaton-proc-type eps-auts)) (not (equal? (automaton-proc-type start-aut) (list-ref processes x))))
-                                (void))
+                     ; ((and (member (list-ref processes x) (map automaton-proc-type eps-auts)) (not (equal? (automaton-proc-type start-aut) (list-ref processes x))))
+                               ; (void))
                       (dump-sys
-                          (model2dot (find-solution x start-aut)
-				                    (string-append output-directory "/" (symbol->string proc-type) "-from-" 
-                                          (symbol->string (automaton-proc-type start-aut)) "-sys.dot") proc-mask))
+                          (model2dot (find-solution (item-index (automaton-proc-type x) processes) x)
+				                    (string-append output-directory "/" (symbol->string proc-type) "-sys.dot") proc-mask))
                       (#t
-                        (find-solution x start-aut)))))
-
-          ; if only checking a single process type, find its index number and return a singleton list
-          starts))
+                        (find-solution (item-index (automaton-proc-type x) processes) x)))))
           eps-auts))
 
         (dump-solution))))
@@ -206,8 +216,7 @@
              [mask (remove name names)])
         (let-values ([(tt oneE-builder) (build-oneEmodel-builder prot)])
           (let ([dummy0 (if dump-1E (model2dot (oneE-builder name start-aut)
-                      (string-append output-directory "/" (symbol->string name) "-from-" 
-                                                    (symbol->string (automaton-proc-type start-aut)) "-1e.dot") #:show-buf #f) (void))])
+                      (string-append output-directory "/" (symbol->string name) "-1e.dot") #:show-buf #f) (void))])
         (let-values ([(soln data) (search prot k name dfs start-aut
                                                          #:ring ring
                                                          #:dump dump

@@ -8,7 +8,7 @@
   (require scheme/cmdline)
   
   ;; version header -- should be in form vx.y.z(-tag)
-  (define version "v0.1.3.0")
+  (define version "v0.1.4.0")
   
   ; parsed values of command line arguments
   ; currently size 11
@@ -33,8 +33,12 @@
   ; ring partial order reduction
   (define ring #f)
 
-  ; start partial order reduction
+  ; star partial order reduction
   (define star (list))
+
+  ; non-parameterized processes
+  ; TODO: should be able to discover this from addition rules
+  (define npp (list))
 
   ; just dump the model at a particular depth
   (define dump #f)
@@ -50,9 +54,9 @@
   ; TODO: not implemented
   (define stop-depth #f)
 
-  ; index of process type to check
+  ; name of process type to check
   (define process-type #f)
-  
+
   ; command line parser which sets up environment
   (define amf-file
     (command-line
@@ -60,6 +64,7 @@
 
      #:multi
      [("--star-point") x "partial order reduction for star" (set! star (cons (string->symbol x) star))]
+     [("--npp" "--non-parameterized-process") x "do not check process type for simulation" (set! npp (cons (string->symbol x) npp))]
   
      #:once-each
      [("-t" "--max-time") num "Specify a maximum execution time in seconds before stopping"
@@ -79,8 +84,8 @@ be a positive number, given" num)))]
     [("--ring") "assume system states are equivalent under rotation" (set! ring #t)]
     [("-f" "--start-depth") x "Depth to begin searching for simulation" (set! start-depth (string->number x))]
     [("-s" "--stop-depth") x "Depth to halt simulation search" (set! stop-depth (string->number x))]
-    [("-p" "--process-type") x "Search only for a specific process" (set! process-type (string->number x))]
+    [("-p" "--process-type") x "Search only for a specific process" (set! process-type (string->symbol x))]
 
      #:args (amf-file)  amf-file ))
  
-(find-k amf-file (list debug max-t dump-1E dump-sys output-directory dfs ring start-depth stop-depth process-type star dump))
+(find-k amf-file (list debug max-t dump-1E dump-sys output-directory dfs ring start-depth stop-depth process-type star dump npp))

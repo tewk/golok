@@ -6,12 +6,12 @@
 #
 #
 process forward {
-IDLE: [ Idle, token] -> [ Idle, token]
-SND: [Start, epsilon] -> [Idle, token]
+IDLE: [ Idle, token] -> [ Idle, token2]
+SND: [Start, epsilon] -> [Idle, token2]
 }
 
 process critical {
-ENTER:	[ Idle,  token ] -> [ Cs , in ]
+ENTER:	[ Idle,  token2 ] -> [ Cs , in ]
 LEAVE:	[ Cs , in ] -> [ Idle , token ]
 
 }
@@ -31,7 +31,7 @@ addition-rule plain-add {
 }
 
 topology {
-	( critical, token, lpeer)
+	( critical, token2, lpeer)
 	( critical, in, self)
   ( forward, token, lpeer)
 }

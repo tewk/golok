@@ -149,7 +149,7 @@
                 [md (build-model initial-state tt)]
                 [model (hash->model md tt oneE-flag initial-state)]
                 ;; now filter out the taus and all other transition types
-                [stripped (strip-taus model (proc->proc-id proc-type tt) tt)]
+                [stripped (strip-taus-short model (proc->proc-id proc-type tt) tt)]
                 ;; remove all duplicate paths
                 [cleaned-model (reduce-model stripped)]
                 ;; remove lonely nodes (without transitions to or from)

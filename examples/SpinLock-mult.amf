@@ -1,7 +1,10 @@
 #
 # SpinLock.amf
 #
-# behavioral automata for spinlock
+# automata file for Spin Lock
+#
+# David Samuelson
+# August 4, 2009
 #
 
 process thread {
@@ -20,12 +23,18 @@ RCV_REL: [B, rel ] -> [NB, begin]
 
 }
 
-
 addition-rule add-thread {
   create: thread x
   foreach object y 
   {
    add: var x -- var y 
+  }
+}
+
+addition-rule add-object {
+  create: object x
+  foreach thread y {
+    add: var x -- var y
   }
 }
 
@@ -38,7 +47,8 @@ topology {
   (thread, begin, peer)
   (thread, begin, self)
 }
+
 initial-config {
 }
 
-kernel = SpinLock.topo
+kernel = SpinLock-mult.topo

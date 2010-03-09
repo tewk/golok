@@ -137,7 +137,7 @@
                   (set! state->representative (ring-reducer-init (length (protocol-process-names prot))))))
            ((not (null? s))
                  (begin
-                    (display-ln "INFO: enabling start partial order reduction on " (los->string s))
+                    (display-ln "INFO: enabling star partial order reduction on " (los->string s))
                     (set! state->representative (star-reducer-init ss s lookup-table))))
           (#t
                   (set! state->representative (lambda (x . y) x))))
@@ -378,10 +378,11 @@
     (#t
     ; otherwise, expand all possible branches
                 ; first collect all states reachable via tau transitions
-      (let* ([starts (explode state (list proc-type-id))]
+      (let* ([starts (list state)];(explode state (list proc-type-id))]
               ; then collect all the proc-type transitions possible from the start set
              [possibles 
-                  (list-of-lists->list (map (lambda (x) (expand x other-mask-ids #t)) starts))]
+                  ;(list-of-lists->list (map (lambda (x) (expand x other-mask-ids #t)) starts))]
+                  (list-of-lists->list (map (lambda (x) (expand x (list) #t)) starts))]
 
               ; finally sort the transitions according to the needed 1e transitions
              [check-list (condense possibles index)])

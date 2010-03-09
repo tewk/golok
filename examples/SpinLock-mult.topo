@@ -2,9 +2,11 @@ model: SpinLock.amf
 
 counts:
 thread 2
-object 1
+object 2
 
 links:
 
 thread 0 -- object 0
+thread 0 -- object 1
 thread 1 -- object 0
+thread 1 -- object 1
