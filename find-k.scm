@@ -72,6 +72,8 @@
   
   (define stop-depth #f)
 
+  (define pruning #t)
+
   ; dump depth
   (define dump #f)
 
@@ -99,7 +101,8 @@
            (set! process-type (list-ref arg-list 9))
            (set! star (list-ref arg-list 10))
            (set! dump (list-ref arg-list 11))
-           (set! npp (list-ref arg-list 12)))))
+           (set! npp (list-ref arg-list 12))
+           (set! pruning (list-ref arg-list 13)))))
 
 ;;; internals ;;;
 
@@ -190,7 +193,7 @@
                                ; (void))
                       (dump-sys
                           (model2dot (find-solution (item-index (automaton-proc-type x) processes) x)
-				                    (string-append output-directory "/" (symbol->string proc-type) "-sys.dot") proc-mask))
+				                    (string-append output-directory "/" (symbol->string proc-type) "-sys.dot") npp))
                       (#t
                         (find-solution (item-index (automaton-proc-type x) processes) x)))))
           eps-auts))
@@ -218,6 +221,7 @@
           (let ([dummy0 (if dump-1E (model2dot (oneE-builder name start-aut (map (lambda (x) (item-index x names)) npp))
                       (string-append output-directory "/" (symbol->string name) "-1e.dot") #:show-buf #f) (void))])
         (let-values ([(soln data) (search prot k name dfs start-aut
+                                                         #:pruning pruning
                                                          #:npp npp
                                                          #:ring ring
                                                          #:dump dump
@@ -259,6 +263,7 @@
             (find-solution-rec id names (modulo (add1 cur_ch) size) best-trace))
           (let* ([new-k (rule 'apply k)])
             (let-values ([(soln data) (search prot new-k (list-ref names id) dfs start-aut
+                                                        #:pruning pruning
                                                         #:npp npp 
                                                         #:ring ring
                                                         #:star star

@@ -57,6 +57,10 @@
   ; name of process type to check
   (define process-type #f)
 
+
+  ; branch pruning
+  (define pruning #t)
+
   ; command line parser which sets up environment
   (define amf-file
     (command-line
@@ -85,7 +89,8 @@ be a positive number, given" num)))]
     [("-f" "--start-depth") x "Depth to begin searching for simulation" (set! start-depth (string->number x))]
     [("-s" "--stop-depth") x "Depth to halt simulation search" (set! stop-depth (string->number x))]
     [("-p" "--process-type") x "Search only for a specific process" (set! process-type (string->symbol x))]
+    [("--disable-pruning") "for testing only" (set! pruning #f)]
 
      #:args (amf-file)  amf-file ))
  
-(find-k amf-file (list debug max-t dump-1E dump-sys output-directory dfs ring start-depth stop-depth process-type star dump npp))
+(find-k amf-file (list debug max-t dump-1E dump-sys output-directory dfs ring start-depth stop-depth process-type star dump npp pruning))

@@ -68,9 +68,6 @@
 ;; (state? hash-map?) -> (state?)
 (define state->representative (void))
 
-;; for cutting branches
-(define prune-branches? #f)
-
 ;; hash-map of states already checked for simulation  (keys: system-states, values: #t)
 (define state-space #f)
 
@@ -97,6 +94,9 @@
 
 (define debug 2)
 
+; filter for branch pruning
+(define start-state-filter (void))
+
 ; print optimizations debugging output
 (define opt-dbg 0)
 
@@ -122,6 +122,7 @@
   ; start - integer-depth | #f
   ; stop - integer-depth | #f
   (lambda (prot topo pt dfs oneE-start-aut
+                            #:pruning [pr #t]
                             #:npp [npp (list)]
                             #:dump [dump #f] 
                             #:ring [r #f]
@@ -134,11 +135,10 @@
         ; save the ids of all parameterized system types 
         (set! npp-ids (map (lambda (x) (item-index x (protocol-process-names prot))) npp))
         (set! pp-ids (filter (lambda (x) (not (member x npp-ids))) (build-list (length (protocol-process-names prot)) values)))
-       
-        ; debug
-        (display-ln "npp-ids: " npp-ids)
-        (display-ln "pp-ids: " pp-ids)
 
+        ; enable/disable pruning
+        (set! start-state-filter (if pr start-aut-filter (lambda (x) #t)))
+       
         ; TODO: generalize these reductions (and maybe figure them out from the topology)
         (cond 
           ((and r (not (null? s)))
@@ -303,15 +303,9 @@
 
 ; filter returns true only for systems states which may contain a proc-type process
 ; in its initial state
-;
-; TODO: need to initialize this... in order to do this, we need to figure out
-;       if the process type we are checking has a unique start state 
-;       (that cannot be revisited)
-(define start-state-filter
+(define start-aut-filter
   (lambda (a) 
-      (if prune-branches? (ormap (lambda (x) 
-                        (= start-aut (mprocess-state x)))
-                     a) #t)))
+      (ormap (lambda (x) (= start-aut (mprocess-state x))) a)))
 
 (define get-fringe
   (lambda (depth state-space fringe)
