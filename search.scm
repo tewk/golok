@@ -100,6 +100,12 @@
 ; print optimizations debugging output
 (define opt-dbg 0)
 
+; ids of non-parameterized process names as integers
+(define npp-ids (list))
+
+; ids of parameterized process names as integers
+(define pp-ids (list))
+
 ;; start state
 (define start-state (void))
 ;;;;;;;;;;;;;;;;;;;;
@@ -116,6 +122,7 @@
   ; start - integer-depth | #f
   ; stop - integer-depth | #f
   (lambda (prot topo pt dfs oneE-start-aut
+                            #:npp [npp (list)]
                             #:dump [dump #f] 
                             #:ring [r #f]
                             #:star [s (list)]
@@ -123,7 +130,15 @@
                             #:stop [stop-d #f])
     (let-values ([(stepper ss lookup-table topo-hash) (init-stepper prot topo)])
       (begin
+
+        ; save the ids of all parameterized system types 
+        (set! npp-ids (map (lambda (x) (item-index x (protocol-process-names prot))) npp))
+        (set! pp-ids (filter (lambda (x) (not (member x npp-ids))) (build-list (length (protocol-process-names prot)) values)))
        
+        ; debug
+        (display-ln "npp-ids: " npp-ids)
+        (display-ln "pp-ids: " pp-ids)
+
         ; TODO: generalize these reductions (and maybe figure them out from the topology)
         (cond 
           ((and r (not (null? s)))
@@ -186,7 +201,7 @@
         (set! other-mask-ids (map (lambda (x) (proc->proc-id x lt)) other-mask))
 
         (let-values ([(fresh-tt builder) (build-oneEmodel-builder prot)])
-          (set! oneE (model-mdl (builder proc-type oneE-start-aut))))
+          (set! oneE (model-mdl (builder proc-type oneE-start-aut npp-ids))))
         
         ; debugging messages
         (if (>= debug 2) (display-ln "checking " (topology->string topo) " for simulation of "
@@ -378,11 +393,11 @@
     (#t
     ; otherwise, expand all possible branches
                 ; first collect all states reachable via tau transitions
-      (let* ([starts (list state)];(explode state (list proc-type-id))]
+      (let* ([starts (explode state pp-ids)]
               ; then collect all the proc-type transitions possible from the start set
              [possibles 
                   ;(list-of-lists->list (map (lambda (x) (expand x other-mask-ids #t)) starts))]
-                  (list-of-lists->list (map (lambda (x) (expand x (list) #t)) starts))]
+                  (list-of-lists->list (map (lambda (x) (expand x npp-ids #t)) starts))]
 
               ; finally sort the transitions according to the needed 1e transitions
              [check-list (condense possibles index)])
@@ -584,7 +599,7 @@
     (if  (equal? start-state end-state) (void)
       (let* ([end-db (make-hash)]
 	     [dmy (hash-set! end-db (state->representative end-state) #t)]
-             [possibles (remove-duplicates (expand start-state (list proc-type-id) #t))]
+             [possibles (remove-duplicates (expand start-state pp-ids #t))]
                 ; since there *is* a path to the end-state, this ormap always gives a non #f result
                 ;
                 ; if it *does* return false, there is an error in our search algorithm
@@ -607,7 +622,7 @@
           #t)
           ;; add all generated todos to done-db and filter out todos that were previously there
         (let* ([possibles ;(filter (lambda (x) (if (hash-has-key? done-db x) #f #t))
-                              (expand end-state (list proc-type-id) #t)]
+                              (expand end-state pp-ids #t)]
 	             [dbg0 (if (>= debug 4) (display-ln "possibles for connect-taus-rec: " possibles) (void))])
           (if (null? possibles) #f
             (let ([res (ormap (lambda (x) (connect-taus-rec x final-db db)) possibles)])

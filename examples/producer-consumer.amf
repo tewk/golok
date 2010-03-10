@@ -14,7 +14,8 @@ init2:    		[Init2, epsilon]   -> [GetBuffer, getcons]
 #recvnak2:     	[WaitMutex, mutexNAKcons] -> [WaitMutex, setcons]
 #recvok2:      	[WaitMutex, mutexOKcons]  ->  [GetBuffer, getcons]
 getnak2:  		[GetBuffer, bufferNAKcons] -> [GetBuffer, getcons]
-getok2:   		[GetBuffer, bufferOKcons] -> [GetBuffer, getcons]
+getok2:   		[GetBuffer, bufferOKcons] -> [HasCosumed, in]
+in:			[HasConsumed, in] -> [GetBuffer, getcons]
 #recvreplay: 	[ClearMutex, mutexCLEARcons] -> [GetBuffer, getcons]
 }
 
@@ -54,6 +55,7 @@ addition-rule add-consumer {
 
 topology {
 	(producer, item, self)
+	(consumer, in, self)
 	(producer, bufferOKprod, peer)
 	(producer, bufferNAKprod, peer)
 #	(producer, mutexOKprod, peer)

@@ -131,7 +131,7 @@
     (let ([tt (create-lookup-table (protocol-ba prot) #t)])
       (values
        tt
-       (lambda (proc-type initial-aut [verbose #f])
+       (lambda (proc-type initial-aut id-mask [verbose #f])
          (let* ([all-aut (protocol-ba prot)]
                 ; set the global eps-id from the lookup table
                 [dmy (set! eps-id (msg->msg-id eps tt))]
@@ -148,8 +148,8 @@
                 [dummy2 (if verbose (display-ln "Building oneEmodel...") (void))]
                 [md (build-model initial-state tt)]
                 [model (hash->model md tt oneE-flag initial-state)]
-                ;; now filter out the taus and all other transition types
-                [stripped (strip-taus-short model (proc->proc-id proc-type tt) tt)]
+                ;; now filter out the taus and object transition types
+                [stripped (strip-taus model id-mask tt)]
                 ;; remove all duplicate paths
                 [cleaned-model (reduce-model stripped)]
                 ;; remove lonely nodes (without transitions to or from)
@@ -189,7 +189,7 @@
   (let* ([model (remove-tau-linking raw-model lt)])
           model))
 
-(define (strip-taus raw-model proc-id lt)
+(define (strip-taus raw-model id-mask lt)
   (let* ([model (remove-tau-linking raw-model lt)]
          [new-model (make-vector (vector-length model))]
         ; lookups to compacted model (without "extra" start states)
@@ -208,7 +208,7 @@
                 (build-list (vector-length new-model) values))
 
       ; for each state reachable via non-tau links, add the map
-      (add-elements-rec 0 proc-id model new-model mapper)
+      (add-elements-rec 0 id-mask model new-model mapper)
 
          ;; return the compacted new model
          (compact-model new-model mapper))))
@@ -241,9 +241,9 @@
             
 
 
-(define (add-elements-rec index proc-id model new-model mapper)
+(define (add-elements-rec index id-mask model new-model mapper)
    (if (hash-has-key? mapper index) (void)
-     (let* ([trans (remove-duplicates (collect-endpoints index proc-id model))]
+     (let* ([trans (remove-duplicates (collect-endpoints index id-mask model))]
             [new-entry (vector-ref new-model index)]
             [size (hash-count mapper)])
           (begin
@@ -251,25 +251,25 @@
                 (vector-set! new-model index new-entry)
                 (hash-set! mapper index size)
                 (for-each 
-                  (lambda (x) (add-elements-rec (vector-ref x 3) proc-id model new-model mapper)) 
+                  (lambda (x) (add-elements-rec (vector-ref x 3) id-mask model new-model mapper)) 
                   trans)))))
 
-(define (collect-endpoints state-index proc-id model)
+(define (collect-endpoints state-index id-mask model)
   (let ([ends (make-vector 1 (list))]
         [visit-list (make-hash)])
     (begin
-      (collect-endpoints-rec state-index proc-id model ends visit-list)
+      (collect-endpoints-rec state-index id-mask model ends visit-list)
       (vector-ref ends 0))))
     
 
-(define (collect-endpoints-rec state-index proc-id model ends visited-list)
+(define (collect-endpoints-rec state-index id-mask model ends visited-list)
   (if (hash-has-key? visited-list state-index)
           ; if we've been here before, die
           (void)
       ;; count the transitions
-      (let* ([pid-tran (filter (lambda (y) (= proc-id (state-id->proc-id (vector-ref y 2))))
+     (let* ([non-pid-tran (filter (lambda (y) (member (state-id->proc-id (vector-ref y 2)) id-mask))
                                 (vector-ref (vector-ref model state-index) 1))]
-             [non-pid-tran (filter (lambda (y) (not (= proc-id (state-id->proc-id (vector-ref y 2)))))
+            [pid-tran (filter (lambda (y) (not (member y non-pid-tran)))
                                 (vector-ref (vector-ref model state-index) 1))])
         (begin
           ; mark this index
@@ -280,13 +280,13 @@
                       (vector-set! ends 0 (append pid-tran (vector-ref ends 0))))
           ; if everything is a tau transition, don't add these transitions, just their children
           ((null? pid-tran)
-                     (for-each (lambda (z) (collect-endpoints-rec z proc-id model ends visited-list)) 
+                     (for-each (lambda (z) (collect-endpoints-rec z id-mask model ends visited-list)) 
                                   (map (lambda (a) (vector-ref a 3)) non-pid-tran)))
           ; otherwise, add these transitions and their children
           (#t
               (begin
                   (vector-set! ends 0 (append pid-tran (vector-ref ends 0)))
-                     (for-each (lambda (z) (collect-endpoints-rec z proc-id model ends visited-list)) 
+                     (for-each (lambda (z) (collect-endpoints-rec z id-mask model ends visited-list)) 
                                   (map (lambda (a) (vector-ref a 3)) non-pid-tran)))))))))
 
 ;;

@@ -215,9 +215,10 @@
              [name (list-ref names id)]
              [mask (remove name names)])
         (let-values ([(tt oneE-builder) (build-oneEmodel-builder prot)])
-          (let ([dummy0 (if dump-1E (model2dot (oneE-builder name start-aut)
+          (let ([dummy0 (if dump-1E (model2dot (oneE-builder name start-aut (map (lambda (x) (item-index x names)) npp))
                       (string-append output-directory "/" (symbol->string name) "-1e.dot") #:show-buf #f) (void))])
         (let-values ([(soln data) (search prot k name dfs start-aut
+                                                         #:npp npp
                                                          #:ring ring
                                                          #:dump dump
                                                          #:star star
@@ -258,6 +259,7 @@
             (find-solution-rec id names (modulo (add1 cur_ch) size) best-trace))
           (let* ([new-k (rule 'apply k)])
             (let-values ([(soln data) (search prot new-k (list-ref names id) dfs start-aut
+                                                        #:npp npp 
                                                         #:ring ring
                                                         #:star star
                                                         #:start start-depth
