@@ -276,8 +276,10 @@
              [gr (if new-fringe (hash-map new-fringe (lambda (x y) x)) #f)]
              [dbg-dummy (if (>= debug 2) (display-ln "\tdepth " depth " fringe has " (if gr (length gr) 0)) (void))])
 
-        (if (not gr) #f ; there are no more states to search
+        (cond ((and (not gr) (not dump)) #f) ; there are no more states to search
+              ((and (not gr) dump) (make-model (hash->model state-space lt topo-ht start-state state->representative) lt))
 
+        (#t
           ; check if some fringe node is the start of 1e simulating chunk
         (let ([sim (ormap search-node gr)])
           (cond 
@@ -289,7 +291,7 @@
                       (make-model (hash->model state-space lt topo-ht start-state state->representative) lt))
             ; otherwise, keep going
             (#t
-              (search-bfs-rec (add1 depth) new-fringe (if dump (sub1 dump) #f)))))))))
+              (search-bfs-rec (add1 depth) new-fringe (if dump (sub1 dump) #f))))))))))
 
 ; create a state space and fringe
 (define create-sp-and-fr
