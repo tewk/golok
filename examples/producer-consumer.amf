@@ -2,33 +2,16 @@ process producer {
 
 init: 			[Init, epsilon] ->  [Produced, item]
 produced: 		[Produced, item] -> [AddBuffer, putprod]
-#recvnak:    	[WaitMutex, mutexNAKprod] -> [WaitMutex, setprod]
-#recvok:     	[WaitMutex, mutexOKprod] ->  [AddBuffer, putprod]
 addbuffernak:	[AddBuffer, bufferNAKprod] -> [AddBuffer, putprod]
 addbufferok:	[AddBuffer, bufferOKprod] ->  [Produced, item]
-#recvmutexok: 	[ClearMutex, mutexCLEARprod] -> [Produced, item]
 }
 
 process consumer {
 init2:    		[Init2, epsilon]   -> [GetBuffer, getcons]
-#recvnak2:     	[WaitMutex, mutexNAKcons] -> [WaitMutex, setcons]
-#recvok2:      	[WaitMutex, mutexOKcons]  ->  [GetBuffer, getcons]
 getnak2:  		[GetBuffer, bufferNAKcons] -> [GetBuffer, getcons]
-getok2:   		[GetBuffer, bufferOKcons] -> [HasCosumed, in]
-in:			[HasConsumed, in] -> [GetBuffer, getcons]
-#recvreplay: 	[ClearMutex, mutexCLEARcons] -> [GetBuffer, getcons]
+getok2:   		[GetBuffer, bufferOKcons] -> [HasConsumed, in]
+inleave:		[HasConsumed, in] -> [GetBuffer, getcons]
 }
-
-# process mutex {
-# setpassprod: 	[Clear, setprod] -> [Set, mutexOKprod]
-# setfailprod: 	[Set, setprod] -> [Set, mutexNAKprod]
-# clearprod: 		[Set, clearprod] -> [Clear, mutexCLEARprod]
-
-# setpasscons: 	[Clear, setcons] -> [Set, mutexOKcons]
-# setfailcons: 	[Set, setcons] -> [Set, mutexNAKcons]
-# clearcons: 		[Set, clearcons] -> [Clear, mutexCLEARcons]
-# }
-
 
 process buffer {
  putzeroprod: [Zero, putprod] -> [One, bufferOKprod]
@@ -43,37 +26,23 @@ process buffer {
 
 addition-rule add-producer {
 	create: producer x
-#	add: var x -- mutex 0
 	add: var x -- buffer 0
 }
 
-addition-rule add-consumer {
-	create: consumer x
-#	add: var x -- mutex 0
-	add: var x -- buffer 0
-}
+#addition-rule add-consumer {
+#	create: consumer x
+#	add: var x -- buffer 0
+#}
 
 topology {
 	(producer, item, self)
 	(consumer, in, self)
 	(producer, bufferOKprod, peer)
 	(producer, bufferNAKprod, peer)
-#	(producer, mutexOKprod, peer)
-#	(producer, mutexNAKprod, peer)
-#	(producer, mutexCLEARprod, peer)
 	(consumer, bufferOKcons, peer)
 	(consumer, bufferNAKcons, peer)
-#	(consumer, mutexOKcons, peer)
-#	(consumer, mutexNAKcons, peer)
-#	(consumer, mutexCLEARcons, peer)
 
-#	(mutex, setprod, peer)
-#	(mutex, clearprod, peer)
 	(buffer, putprod, peer)
-
-
-#	(mutex, setcons, peer)
-#	(mutex, clearcons, peer)
 	(buffer, getcons, peer)
 }
 

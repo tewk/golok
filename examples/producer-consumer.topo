@@ -3,7 +3,7 @@ model: producer-consumer.amf
 counts:
 
 producer 2
-consumer 2
+consumer 2 
 buffer 1
 
 links:

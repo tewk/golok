@@ -40,6 +40,8 @@
 ;; 1E model as labeled-transition directed graph
 (define oneE (void))
 
+
+
 ;; the expand function 
 ;;
 ;; returns all possible new states
@@ -222,7 +224,9 @@
                  (display-ln "dumping (did NOT really find simulation)")
                   (values #t result)))
             (result
-                (values #t (search->model result)))
+		(begin
+		(display-ln "We are going to search now")
+                (values #t (search->model result))))
               ; otherwise just return failure
               (#t
                 (values #f max-trace))))))))
@@ -591,25 +595,28 @@
 ;; (using tau transitions)
 (define connect-taus!
   (lambda (start-state end-state db) 
+    ;We want to check if, after going through all tau-transitions from start-state to children
+    ;if we are going to reach the end-state
     ; dummy check
-    (if  (equal? start-state end-state) (void)
+    (if  (equal? start-state end-state) (begin (display-ln "Start is equal to end \n\n") (void))
       (let* ([end-db (make-hash)]
+	     [output (if (>= debug 4) (display-ln "Start is "start-state " and end is "end-state "\n") (void))]
 	     [dmy (hash-set! end-db (state->representative end-state) #t)]
              [possibles (remove-duplicates (expand start-state pp-ids #t))]
                 ; since there *is* a path to the end-state, this ormap always gives a non #f result
                 ;
                 ; if it *does* return false, there is an error in our search algorithm
-             [success? (ormap (lambda (x) (connect-taus-rec x end-db db)) possibles)])
+             [success? (ormap (lambda (x) (connect-taus-rec x end-db db (make-hash))) possibles)])
           (if (not success?) (error "there is a bug in search!") (void))))))
 
-; returns a list or #f: #f on failure or (list todo final-state) 
+; returns a list or #f: #f on failure or (list todo final-state)
 ;     the todo which started this level and the final edge state
 ; (we need to return the first state of final-todo)
 (define connect-taus-rec
-  (lambda (init-td final-db db)
+  (lambda (init-td final-db db visited)
     (let* ([start-state (todo-state init-td)]
           [end-state (todo->next-state init-td)]
-	  [dmy0 (if (>= debug 4) (display-ln "ctr call:\n\tss: " start-state "\n\tes: " end-state) (void))])
+	  [dmy0 (if (>= debug 4)  (display-ln "ctr call:\n\tss: " start-state "\n\tes: " end-state"\n\n\n") (void))])
       (if (hash-has-key? final-db end-state)
         (begin
 	        (if (>= debug 4) (display-ln "found connection in connect-taus-rec!") (void))
@@ -621,12 +628,22 @@
                               (expand end-state pp-ids #t)]
 	             [dbg0 (if (>= debug 4) (display-ln "possibles for connect-taus-rec: " possibles) (void))])
           (if (null? possibles) #f
-            (let ([res (ormap (lambda (x) (connect-taus-rec x final-db db)) possibles)])
+            (let ([res (ormap 
+			(lambda (x)
+				(if (hash-has-key? visited (todo-state x))
+				(begin
+				  ;(display-ln "visited before" (todo-state x)"\n")
+				    ;the state was visited before so no need to try its sub-tau transitions
+				  #t)
+				(begin
+				  (hash-set! visited end-state #f)
+				  (connect-taus-rec x final-db db visited))))
+			possibles)])
               ; if one of our children found the solution, add its transition and return
               (if res
                 (begin
                   (add-td-to-db! init-td db) #t)
-                #f))))))))
+                 #f))))))))
 
 ; =============================== partial order reduction =================================== ;
 (define ring-reducer-init-big
