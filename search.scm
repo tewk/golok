@@ -73,6 +73,10 @@
 ;; hash-map of states already checked for simulation  (keys: system-states, values: #t)
 (define state-space #f)
 
+;; hash-map to save the number of explored states for the sake of writing the 
+;; results in the paper
+(define states-explored 0) 
+
 ;; filter for checking a state for simulation (this is a heuristic)
 ;; TODO: implement this (since we changed to state-based instead of 
 ;;            automaton-based representation, this is harder to do)
@@ -225,7 +229,8 @@
                   (values #t result)))
             (result
 		(begin
-		(display-ln "This is simulating done" (vector-length result) "\n")
+		;(display-ln "This is simulating done" (vector-length result) "\n")
+		(display-ln "The number of explored states is " (hash-count states-explored) "\n")
                 (values #t (search->model result))))
               ; otherwise just return failure
               (#t
@@ -270,6 +275,7 @@
     (begin
       ; reset the global space
       (set! state-space (make-hash))
+      (set! states-explored (make-hash))
       (search-bfs-rec depth (make-hash) dump))))
 
 (define search-bfs-rec
@@ -324,6 +330,8 @@
         ; expand once and return results
        (get-fringe-rec state-space fringe 1))))
 
+; this is basically called once since the parameter of depth is "1" 
+; and then the fringe is returned
 (define get-fringe-rec
   (lambda (state-space fringe depth)
     (let ([fr (hash-map fringe (lambda (x y) x))])
@@ -332,7 +340,7 @@
         ((= 0 (length fr)) (begin (display-ln "AM I ever here?\n")#f))
 
         ; return fringe
-        ((= 0 depth) (begin (display-ln "The state space is " (hash-count state-space)"\n")fringe))
+        ((= 0 depth) fringe)  ;(begin (display-ln "The state space is " (hash-count state-space)"\n")fringe))
 
         ; otherwise expand next
         (#t
@@ -352,7 +360,7 @@
               ; add all states to state-space
               (map (lambda (x)
                 (hash-set! state-space x #t)) possible-starts)
-	      (display-ln "The count of state space is "(hash-count state-space) "\n")
+	      ;(display-ln "The count of state space is "(hash-count state-space) "\n")
               (get-fringe-rec state-space new-fr (sub1 depth)))))))))
 ;;;;;;;;;;;;;;;;; end search ;;;;;;;;;;;;;;;;;;
 
@@ -414,7 +422,9 @@
       ; otherwise, lets assume this state simulates
       (let ([new-em (make-vector (vector-length eq-map))])
         (begin
-	  (display-ln "The number of children to explore are" (length check-list) "\n")
+	  ;(display-ln "Check list has " check-list "\n") 
+	  (map (lambda(x) (hash-set! states-explored x  #f)) check-list)
+	  ;(display-ln "The number of children to explore are" (length check-list) "\n")
             ; first make a copy of the equivalence map
           (vector-copy! new-em 0 eq-map)
 
