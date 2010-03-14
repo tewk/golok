@@ -29,4 +29,4 @@ initial-config {
  ( node 0 SND )
 }
 
-kernel = dme.topo
+kernel = dme-2.topo

@@ -225,7 +225,7 @@
                   (values #t result)))
             (result
 		(begin
-		(display-ln "We are going to search now")
+		(display-ln "This is simulating done" (vector-length result) "\n")
                 (values #t (search->model result))))
               ; otherwise just return failure
               (#t
@@ -258,7 +258,7 @@
                     [possible-starts (filter start-state-filter new-states)])
                   (begin
                       (hash-set! store state #t)
-                      (if (null? possible-starts) #f
+                      (if (null? possible-starts) (begin (display-ln "The hash has " (hash-count store) " state \n") #f)
                          (ormap (lambda (x) (search-dfs-rec x store)) possible-starts)))))))))))
         
 
@@ -329,10 +329,10 @@
     (let ([fr (hash-map fringe (lambda (x y) x))])
       (cond
         ; if fringe empty, return fail
-        ((= 0 (length fr)) #f)
+        ((= 0 (length fr)) (begin (display-ln "AM I ever here?\n")#f))
 
         ; return fringe
-        ((= 0 depth) fringe) 
+        ((= 0 depth) (begin (display-ln "The state space is " (hash-count state-space)"\n")fringe))
 
         ; otherwise expand next
         (#t
@@ -352,6 +352,7 @@
               ; add all states to state-space
               (map (lambda (x)
                 (hash-set! state-space x #t)) possible-starts)
+	      (display-ln "The count of state space is "(hash-count state-space) "\n")
               (get-fringe-rec state-space new-fr (sub1 depth)))))))))
 ;;;;;;;;;;;;;;;;; end search ;;;;;;;;;;;;;;;;;;
 
@@ -413,6 +414,7 @@
       ; otherwise, lets assume this state simulates
       (let ([new-em (make-vector (vector-length eq-map))])
         (begin
+	  (display-ln "The number of children to explore are" (length check-list) "\n")
             ; first make a copy of the equivalence map
           (vector-copy! new-em 0 eq-map)
 
