@@ -26,11 +26,10 @@ echo "Testing BFS"
   else
   ./golok -o output examples/$i.amf || fail
   fi
-  make clean
  
-##echo "Testing DFS"
- # ./golok -o output --dfs examples/$i.amf || fail
-#  make clean
+#echo "Testing DFS"
+# ./golok -o output --dfs examples/$i.amf || fail
+# make clean
 done
 
 make clean

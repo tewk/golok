@@ -87,7 +87,8 @@
                         (display-ln (car x) " " (cadr x))) counts)
             (display-ln "\nlinks:\n")
             (for-each (lambda (x)
-                        (display-ln (car x) " " (cadr x) " " (caddr x) " " (fourth x) " " (fifth x))) links)))))))
+                        (display-ln (car x) " " (cadr x) " " (caddr x) " " (fourth x) " " (fifth x))) links)))
+          'replace))))
 
 (define the-lexical-spec
   '((whitespace (whitespace) skip)
