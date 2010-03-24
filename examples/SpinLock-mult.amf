@@ -1,10 +1,7 @@
 #
-# SpinLock.amf
+# SpinLock-mult.amf
 #
-# automata file for Spin Lock
-#
-# David Samuelson
-# August 4, 2009
+# automata file for Spin Lock with multiple locks
 #
 
 process thread {
@@ -23,32 +20,40 @@ RCV_REL: [B, rel ] -> [NB, begin]
 
 }
 
-addition-rule add-thread {
-  create: thread x
-  foreach object y 
-  {
-   add: var x -- var y 
-  }
-}
-
-addition-rule add-object {
-  create: object x
-  foreach thread y {
-    add: var x -- var y
-  }
-}
 
 topology {
-  (object, req, peer)
-  (object, rel, peer)
-  (thread, in, self)
-  (thread, ack, peer)
-  (thread, nack, peer)
-  (thread, begin, peer)
-  (thread, begin, self)
+  connectivity {
+    thread 0 -- object 0
+    thread 0 -- object 1
+    thread 1 -- object 0
+    thread 1 -- object 1
+  }
+
+  additionrule add-thread {
+    create: thread x
+    foreach object y 
+    {
+     add: var x -- var y 
+    }
+  }
+  
+  additionrule add-object {
+    create: object x
+    foreach thread y {
+      add: var x -- var y
+    }
+  }
+
+  msgs {
+    (object, req, peer)
+    (object, rel, peer)
+    (thread, in, self)
+    (thread, ack, peer)
+    (thread, nack, peer)
+    (thread, begin, peer)
+    (thread, begin, self)
+  }
 }
 
 initial-config {
 }
-
-kernel = SpinLock-mult.topo

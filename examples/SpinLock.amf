@@ -20,25 +20,30 @@ RCV_REL: [B, rel ] -> [NB, begin]
 
 }
 
+topology {
+  connectivity {
+    thread 0 -- object 0
+    thread 1 -- object 0
+  }
 
-addition-rule add-thread {
-  create: thread x
-  foreach object y 
-  {
-   add: var x -- var y 
+  additionrule add-thread {
+    create: thread x
+    foreach object y 
+    {
+     add: var x -- var y 
+    }
+  }
+  
+  msgs {
+    (object, req, peer)
+    (object, rel, peer)
+    (thread, in, self)
+    (thread, ack, peer)
+    (thread, nack, peer)
+    (thread, begin, peer)
+    (thread, begin, self)
   }
 }
 
-topology {
-  (object, req, peer)
-  (object, rel, peer)
-  (thread, in, self)
-  (thread, ack, peer)
-  (thread, nack, peer)
-  (thread, begin, peer)
-  (thread, begin, self)
-}
 initial-config {
 }
-
-kernel = SpinLock.topo

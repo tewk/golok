@@ -61,15 +61,17 @@
     '((whitespace (whitespace) skip)
       (comment ("#" (arbno (not #\newline))) skip)
       (identifier (letter (arbno (or letter digit "." "_" "/" "-" "?"))) symbol)
-     ; (link ("-" (or "-" "E" ">")) symbol)
       (number ((or digit "-") (arbno digit)) number)))
   
   (define the-grammar
-    '((p_protocol ((arbno "process" p_process) (arbno "addition-rule" addition-rule) p_topology initial-config "kernel" "=" identifier) a-prot)
+    '((p_protocol ((arbno "process" p_process)  p_topology initial-config) a-prot)
       (p_process (identifier "{" (arbno automaton) "}") a-process)
       (automaton (identifier ":" "[" identifier "," identifier "]" "->" "[" identifier "," identifier "]" ) simple-automaton)
+       ;; link is a single entry in the connectivity table
+      (p_link (identifier number link identifier number) a-link)
 
-      (p_topology ( "topology " "{" (arbno p_transition) "}" ) a-p_topology)
+      (p_topology ( "topology " "{" "connectivity" "{" (arbno p_link) "}" (arbno "additionrule" addition-rule) "msgs" "{" (arbno p_transition) "}"  "}" ) a-p_topology)
+                      
       (p_transition ("(" identifier "," identifier "," identifier ")") a-p_transition)
 
       (addition-rule (identifier "{" (arbno p_expr) "}") an-addition-rule)
@@ -100,12 +102,22 @@
             (link_type link?)
             (n2 name?)))
 
-  (define-datatype
-    link
-    link?
-    (peer-link)
-    (directed-link)
-    (pc-link))
+(define-datatype
+  link
+  link?
+  (peer-link)
+  (directed-link)
+  (pc-link))
+
+(define-datatype
+  p_link
+  p_link?
+  (a-link
+   (p1 symbol?)
+   (i1 number?)
+   (lt link?)
+   (p2 symbol?)
+   (i2 number?)))
 
   (define-datatype
      addition-rule
@@ -158,10 +170,9 @@
     p_protocol?
     (a-prot
      (proc-list (list-of p_process?))
-     (add-rule-list (list-of addition-rule?))
      (topo p_topology?)
-     (init initial-config?)
-     (kernel symbol?)))
+     (init initial-config?)))
+     
   
   (define-datatype
     p_process
@@ -175,8 +186,10 @@
     p_topology
     p_topology?
     (a-p_topology 
+     (links (list-of p_link?))
+     (add-rules (list-of addition-rule?))
      (trans (list-of p_transition?))))
-  
+
   (define-datatype
     p_transition
     p_transition?
@@ -258,29 +271,29 @@
     ;; read a protocol and return a protocol structure
     ;;
     (define parseProtocol
-      (lambda (prot)
+      (lambda (prot filename)
         (cases p_protocol prot
-          (a-prot (p_processes p_add-rules topo_r init kernel)
-              (begin
+          (a-prot (p_processes topo_r init)
+            (cases p_topology topo_r
+              (a-p_topology (p_links p_add-rules p_transitions)
+                (begin
                   ; first do some quick sanity checks
                   (if (zero? (length p_processes)) (raise-user-error 'PARSE "no processes defined!") (void))
                   (if (zero? (length p_add-rules)) (raise-user-error 'PARSE "no addition rules defined!") (void))
-
                   (let* ([procs (map p_proc2proc p_processes)]
                          [add-rules (map parse-rule p_add-rules)]
-                         [the-topo (parse-topo topo_r)]
+                         [the-topo (parse-topo p_transitions)]
                          [names (map process-name procs)]
                          [auts (list-of-lists->list
                                 (map process-auts procs))]
-                         [start (parse-init init auts)])
-                    (make-protocol names procs add-rules the-topo start (symbol->string kernel))))))))
+                         [start (parse-init init auts)]
+                         [kernel (create-kernel filename p_links)])
+                    (make-protocol names procs add-rules the-topo start kernel)))))))))
     
     ;; topology object -> list of allowed transitions 
     (define parse-topo
-      (lambda (t)
-        (cases p_topology t
-          (a-p_topology (tr)
-                      (map trans-unpacker tr)))))
+      (lambda (tr)
+         (map trans-unpacker tr)))
 
     (define trans-unpacker
       (lambda (x)
@@ -293,6 +306,11 @@
         (cases initial-config init
           (the-initial-config (loss)
                               (map (lambda (x) (parse-start-spec x auts)) loss)))))
+    
+    (define parse_link
+      (lambda (ln)
+        (cases p_link ln
+          (a-link (id1 num1 lt id2 num2) (list id1 num1 (unwrap-lt lt) id2 num2)))))
     
     (define parse-start-spec
       (lambda (spec auts)
@@ -309,7 +327,7 @@
     
     (define parse-amf-file
       (lambda (x)
-        (parseProtocol (s&p_file x))))
+        (parseProtocol (s&p_file x) x)))
     
     ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
     
@@ -488,7 +506,6 @@
           (number-name-end (z) (list id z))
           (variable-name-end (z) (list id z)))))))
         
-
 ; count the number of possible bindings for this requirement
 (define count-options
   (lambda (x t_links)
@@ -529,3 +546,40 @@
     (lambda (x)
       (if (eq? sym x) (list proc_t index)
           (env x)))))
+
+;;
+;; (string? (list-of link?)) -> topology?
+;;
+(define (create-kernel filename p_links)
+  (let* ([links (map parse_link p_links)]
+         [counts (count-links links)])
+    (make-topology filename counts links)))
+
+;;
+;; (list-of link?
+;;
+(define (count-links links)
+  (let ([db (make-hash)])
+    (begin
+      (count-links-rec links db)
+      (hash-map db (lambda (x y) (list x y))))))
+
+(define (count-links-rec links db)
+  (if (null? links) (void)
+    (let* ([ln (car links)]
+           [name1 (car ln)]
+           [sz1 (second ln)]
+           [name2 (fourth ln)]
+           [sz2 (fifth ln)])
+      (begin
+        (process-link-entry name1 sz1 db)
+        (process-link-entry name2 sz2 db)
+        (count-links-rec (cdr links) db)))))
+
+(define (process-link-entry name sz db)
+  (if (not (hash-has-key? db name))
+      (hash-set! db name (add1 sz))
+      (let ([prev-sz (hash-ref db name)])
+            ;; if already have a larger count, ignore
+        (if (> prev-sz sz) (void)
+            (hash-set! db name (add1 sz))))))

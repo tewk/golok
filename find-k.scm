@@ -139,7 +139,7 @@
               (set! start-time (current-seconds))
               
               ; k is current system instance
-              (set! k (file->topology (string-append amf-directory (protocol-kernel prot))))))))
+              (set! k (protocol-kernel prot))))))
 
   (define parse-filename
     (lambda (fn)

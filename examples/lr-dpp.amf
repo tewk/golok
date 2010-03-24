@@ -49,61 +49,69 @@ process right-diner {
 	EAT-DONE2: [eat, rel-forks2] -> [not-eating, begin2]
 }
 
-# add another left and right diner into the ring
-addition-rule add-two {
-      create: left-diner x
-      create: right-diner y
-      require: right-diner z -> left-diner 0
-      remove: var z -> left-diner 0
-      add: var z -> var x
-      add: var x -> var y
-      add: var y -> left-diner 0
-}
 
 topology {
-# the general format is:
-#
-# ( process-type, message, link-position )
-#
-
-#	(ask-left, i_diner, i-1_diner) 
-#
-# this first rule means
-# a left-diner process can receive an 
-# ask-left message from is right peer
-#
-# (see lr-dpp.topo for the meaning of 
-# right peer)
-    (left-diner, ask-left, rpeer)
-    (right-diner, ask-left2, rpeer)
-    
-#	(left-taken, i_diner, i+1_diner)
-    (left-diner, left-taken, lpeer)
-    (right-diner, left-taken2, lpeer)
-
-#	(left-free, i_diner, i+1_diner)
-    (left-diner, left-free, lpeer)
-    (right-diner, left-free2, lpeer)
-
-#	(ask-right, i_diner, i+1_diner)
-    (left-diner, ask-right, lpeer)
-    (right-diner, ask-right2, lpeer)
-
-#	(right-taken, i_diner, i-1_diner)
-    (left-diner, right-taken, rpeer)
-    (right-diner, right-taken2, rpeer)
-
-#	(right-free, i_diner, i-1_diner)
-    (left-diner, right-free, rpeer)
-    (right-diner, right-free2, rpeer)
-
-#	(rel-forks, i_diner, i_diner)
-    (left-diner, rel-forks, self)
-    (right-diner, rel-forks2, self)
-
-# (self start messages)
-    (left-diner, begin, self)
-    (right-diner, begin2, self)
+  connectivity {
+    left-diner 0 -> right-diner 0
+    right-diner 0 -> left-diner 0
+  }
+  
+  # add another left and right diner into the ring
+  additionrule add-two {
+        create: left-diner x
+        create: right-diner y
+        require: right-diner z -> left-diner 0
+        remove: var z -> left-diner 0
+        add: var z -> var x
+        add: var x -> var y
+        add: var y -> left-diner 0
+  }
+  
+  # the general format is:
+  #
+  # ( process-type, message, link-position )
+  #
+  
+  #	(ask-left, i_diner, i-1_diner) 
+  #
+  # this first rule means
+  # a left-diner process can receive an 
+  # ask-left message from is right peer
+  #
+  # (see lr-dpp.topo for the meaning of 
+  # right peer)
+  msgs {
+      (left-diner, ask-left, rpeer)
+      (right-diner, ask-left2, rpeer)
+      
+  #	(left-taken, i_diner, i+1_diner)
+      (left-diner, left-taken, lpeer)
+      (right-diner, left-taken2, lpeer)
+  
+  #	(left-free, i_diner, i+1_diner)
+      (left-diner, left-free, lpeer)
+      (right-diner, left-free2, lpeer)
+  
+  #	(ask-right, i_diner, i+1_diner)
+      (left-diner, ask-right, lpeer)
+      (right-diner, ask-right2, lpeer)
+  
+  #	(right-taken, i_diner, i-1_diner)
+      (left-diner, right-taken, rpeer)
+      (right-diner, right-taken2, rpeer)
+  
+  #	(right-free, i_diner, i-1_diner)
+      (left-diner, right-free, rpeer)
+      (right-diner, right-free2, rpeer)
+  
+  #	(rel-forks, i_diner, i_diner)
+      (left-diner, rel-forks, self)
+      (right-diner, rel-forks2, self)
+  
+  # (self start messages)
+      (left-diner, begin, self)
+      (right-diner, begin2, self)
+  }
 }
 
 # no special configuration
@@ -119,5 +127,3 @@ topology {
 # (init in the automaton RIGHT-START)
 initial-config {
 }
-
-kernel = lr-dpp.topo

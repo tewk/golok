@@ -11,22 +11,28 @@ LEAVE:	[ Cs, in ] -> [ Idle , token ]
 
 }
 
-addition-rule plain-add {
-  require: node y -> node 0
-  create: node x
-  remove: var y -> node 0
-  add: var y -> var x
-  add: var x -> node 0
-}
 
 topology {
-	( node, token, lpeer)
-	( node, in, self)
-	( node, choose, self)
+
+  connectivity {
+    node 0 -> node 0
+  }
+  
+  additionrule plain-add {
+    require: node y -> node 0
+    create: node x
+    remove: var y -> node 0
+    add: var y -> var x
+    add: var x -> node 0
+  }
+  
+  msgs {
+  	( node, token, lpeer)
+  	( node, in, self)
+  	( node, choose, self)
+  }
 }
 
 initial-config {
  ( node 0 SND )
 }
-
-kernel = dme.topo

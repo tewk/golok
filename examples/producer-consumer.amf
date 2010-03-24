@@ -1,16 +1,16 @@
 process producer {
 
-init: 			[Init, epsilon] ->  [Produced, item]
-produced: 		[Produced, item] -> [AddBuffer, putprod]
-addbuffernak:	[AddBuffer, bufferNAKprod] -> [AddBuffer, putprod]
-addbufferok:	[AddBuffer, bufferOKprod] ->  [Produced, item]
+  init: 			[Init, epsilon] ->  [Produced, item]
+  produced: 		[Produced, item] -> [AddBuffer, putprod]
+  addbuffernak:	[AddBuffer, bufferNAKprod] -> [AddBuffer, putprod]
+  addbufferok:	[AddBuffer, bufferOKprod] ->  [Produced, item]
 }
 
 process consumer {
-init2:    		[Init2, epsilon]   -> [GetBuffer, getcons]
-getnak2:  		[GetBuffer, bufferNAKcons] -> [GetBuffer, getcons]
-getok2:   		[GetBuffer, bufferOKcons] -> [HasConsumed, in]
-inleave:		[HasConsumed, in] -> [GetBuffer, getcons]
+  init2:    		[Init2, epsilon]   -> [GetBuffer, getcons]
+  getnak2:  		[GetBuffer, bufferNAKcons] -> [GetBuffer, getcons]
+  getok2:   		[GetBuffer, bufferOKcons] -> [HasConsumed, in]
+  inleave:		[HasConsumed, in] -> [GetBuffer, getcons]
 }
 
 process buffer {
@@ -24,29 +24,38 @@ process buffer {
  
 }
 
-addition-rule add-producer {
-	create: producer x
-	add: var x -- buffer 0
-}
-
-#addition-rule add-consumer {
-#	create: consumer x
-#	add: var x -- buffer 0
-#}
 
 topology {
-	(producer, item, self)
-	(consumer, in, self)
-	(producer, bufferOKprod, peer)
-	(producer, bufferNAKprod, peer)
-	(consumer, bufferOKcons, peer)
-	(consumer, bufferNAKcons, peer)
 
-	(buffer, putprod, peer)
-	(buffer, getcons, peer)
+  connectivity {
+    producer 0 -- buffer 0
+    producer 1 -- buffer 0
+    consumer 0 -- buffer 0
+    consumer 1 -- buffer 0
+  }
+  
+  additionrule add-producer {
+  	create: producer x
+  	add: var x -- buffer 0
+  }
+
+  additionrule add-consumer  {
+  	create: consumer x
+  	add: var x -- buffer 0
+  }
+  
+  msgs {
+  	(producer, item, self)
+  	(consumer, in, self)
+  	(producer, bufferOKprod, peer)
+  	(producer, bufferNAKprod, peer)
+  	(consumer, bufferOKcons, peer)
+  	(consumer, bufferNAKcons, peer)
+  
+  	(buffer, putprod, peer)
+  	(buffer, getcons, peer)
+  }
 }
 
 initial-config {
 }
-
-kernel = producer-consumer.topo

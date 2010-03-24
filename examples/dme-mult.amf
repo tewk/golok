@@ -1,5 +1,5 @@
 #
-# dme-multi.amf 
+# dme-mult.amf 
 #
 # implementation of distributed mutual exclusion with
 # "normal" nodes and pass nodes (as in "Automating Cut-off..")
@@ -17,27 +17,33 @@ LEAVE:	[ Cs , in ] -> [ Idle , token ]
 }
 
 # insert two new elements (a pass and a node) into the ring
-addition-rule plain-add {
-  require: forward a -> critical 0
-
-  create: critical x
-  create: forward y
-
-  remove: var a -> critical 0
-
-  add: var a -> var x
-  add: var x -> var y
-  add: var y -> critical 0
-}
 
 topology {
-	( critical, token2, lpeer)
-	( critical, in, self)
-  ( forward, token, lpeer)
+  connectivity {
+    critical 0 -> forward 0
+    forward 0 -> critical 0
+  }
+  
+  additionrule plain-add {
+    create: critical x
+    create: forward y
+  
+    require: forward a -> critical 0
+
+    remove: var a -> critical 0
+  
+    add: var a -> var x
+    add: var x -> var y
+    add: var y -> critical 0
+  }
+  
+  msgs {
+  	( critical, token2, lpeer)
+  	( critical, in, self)
+    ( forward, token, lpeer)
+  }
 }
 
 initial-config {
  ( forward 0 SND )
 }
-
-kernel = dme-mult.topo
