@@ -52,19 +52,19 @@ process right-diner {
 
 topology {
   connectivity {
-    left-diner 0 -> right-diner 0
-    right-diner 0 -> left-diner 0
+    left-diner 0 -- right-diner 0
+    right-diner 0 -- left-diner 0
   }
   
   # add another left and right diner into the ring
   additionrule add-two {
         create: left-diner x
         create: right-diner y
-        require: right-diner z -> left-diner 0
-        remove: var z -> left-diner 0
-        add: var z -> var x
-        add: var x -> var y
-        add: var y -> left-diner 0
+        require: right-diner z -- left-diner 0
+        remove: var z -- left-diner 0
+        add: var z -- var x
+        add: var x -- var y
+        add: var y -- left-diner 0
   }
   
   # the general format is:

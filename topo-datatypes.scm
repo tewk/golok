@@ -168,6 +168,12 @@
           (env x)))))
 
 ; return a topo-vector for model-builder
+;
+; output is a vector of size # processes in topology
+;
+; each entry is a list of duples
+; (msg index-of-process-this-message-can-be-sent-to)
+;
 (define topology-instantiate
   (lambda (topo prot-msgs)
     (let* ([ot (make-offset-table (topology-counts topo))]
@@ -179,7 +185,7 @@
                                               (vector-ref model x)
                                               prot-msgs vect (ot_ri2pt x ot)))
                             (build-list size values))])
-      vect)))
+          vect)))
 
 (define make-msg-list!
   (lambda (x type-list prot-msgs vect pt)
@@ -224,8 +230,11 @@
                            (cons-to-vec vect r2 (list 'child  p1 r1))))
           ((eqv? lt '--) (begin
                            (cons-to-vec vect r1 (list 'peer  p2 r2))
-                           (cons-to-vec vect r2 (list 'peer p1 r1))))
+                           (cons-to-vec vect r2 (list 'peer p1 r1)))
+                           (cons-to-vec vect r1 (list 'lpeer p2 r2))
+                           (cons-to-vec vect r2 (list 'rpeer p1 r1)))
           ((eqv? lt '->) (begin
+                           (display-ln "WARNING: '->' is depreciated! Use '--' instead")
                            (cons-to-vec vect r1 (list 'lpeer p2 r2))
                            (cons-to-vec vect r2 (list 'rpeer p1 r1))))
           (#t (raise-user-error (string-append "Parse error: " 

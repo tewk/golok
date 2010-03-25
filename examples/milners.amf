@@ -25,16 +25,16 @@ RESTART: 	[wait-token, token]   -> [task-run, token]
 
 topology {
   connectivity {
-    scheduler 0 -> scheduler 1
-    scheduler 1 -> scheduler 0
+    scheduler 0 -- scheduler 1
+    scheduler 1 -- scheduler 0
   }
   
   additionrule plain-add {
-    require: scheduler y -> scheduler 0
+    require: scheduler y -- scheduler 0
     create: scheduler x
-    remove: var y -> scheduler 0
-    add: var y -> var x
-    add: var x -> scheduler 0
+    remove: var y -- scheduler 0
+    add: var y -- var x
+    add: var x -- scheduler 0
   }
   
   msgs {

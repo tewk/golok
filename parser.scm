@@ -193,8 +193,9 @@
   (define-datatype
     p_transition
     p_transition?
-    (a-p_transition (msg symbol?)
+    (a-p_transition 
                (process-type symbol?)
+               (msg symbol?)
                (from-what-link-type symbol?)))
   
     (define-datatype

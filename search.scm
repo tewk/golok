@@ -337,7 +337,7 @@
     (let ([fr (hash-map fringe (lambda (x y) x))])
       (cond
         ; if fringe empty, return fail
-        ((= 0 (length fr)) (begin (display-ln "AM I ever here?\n")#f))
+        ((= 0 (length fr)) #f)
 
         ; return fringe
         ((= 0 depth) fringe)  ;(begin (display-ln "The state space is " (hash-count state-space)"\n")fringe))

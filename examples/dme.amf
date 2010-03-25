@@ -1,5 +1,5 @@
 #
-# gen-DME.amf 
+# dme.amf 
 #
 #
 process node {
@@ -15,15 +15,15 @@ LEAVE:	[ Cs, in ] -> [ Idle , token ]
 topology {
 
   connectivity {
-    node 0 -> node 0
+    node 0 -- node 0
   }
   
   additionrule plain-add {
-    require: node y -> node 0
+    require: node y -- node 0
     create: node x
-    remove: var y -> node 0
-    add: var y -> var x
-    add: var x -> node 0
+    remove: var y -- node 0
+    add: var y -- var x
+    add: var x -- node 0
   }
   
   msgs {

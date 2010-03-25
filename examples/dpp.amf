@@ -25,15 +25,15 @@ process diner {
 
 topology {
   connectivity {
-    diner 0 -> diner 0
+    diner 0 -- diner 0
   }
   
   additionrule add-one {
     create: diner x
-    require: diner y -> diner 0
-    remove: var y -> diner 0
-    add: var y -> var x
-    add: var x -> diner 0
+    require: diner y -- diner 0
+    remove: var y -- diner 0
+    add: var y -- var x
+    add: var x -- diner 0
   }
   
   msgs {

@@ -2,7 +2,7 @@
 
 # this *should* be something nice to ensure stuff works
 
-TESTS="dme SpinLock SpinLock-mult dpp lr-dpp" 
+TESTS="dme dme-mult SpinLock SpinLock-mult dpp lr-dpp" 
 
 make clean
 make
