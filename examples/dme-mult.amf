@@ -37,7 +37,6 @@ topology {
   }
   
   msgs {
-    ( critical, token2, peer)
   	( critical, token2, lpeer)
   	( critical, in, self)
     ( forward, token, lpeer)
