@@ -125,5 +125,5 @@ topology {
 # all right processes start in the first listed
 # right process state
 # (init in the automaton RIGHT-START)
-initial-config {
+initialconfig {
 }

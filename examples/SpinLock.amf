@@ -45,5 +45,5 @@ topology {
   }
 }
 
-initial-config {
+initialconfig {
 }

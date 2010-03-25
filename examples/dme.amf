@@ -33,6 +33,6 @@ topology {
   }
 }
 
-initial-config {
+initialconfig {
  ( node 0 SND )
 }

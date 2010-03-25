@@ -90,7 +90,7 @@
       (name-end ( number ) number-name-end)
       (name-end ( identifier) variable-name-end)
 
-      (initial-config ( "initial-config" "{" (arbno "(" start-spec ")" ) "}" ) the-initial-config)
+      (initial-config ( "initialconfig" "{" (arbno "(" start-spec ")" ) "}" ) the-initial-config)
       (start-spec (identifier number identifier) a-start-spec)
 
    ))   

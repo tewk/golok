@@ -43,6 +43,6 @@ topology {
   }
 }
 
-initial-config {
+initialconfig {
  ( forward 0 SND )
 }
