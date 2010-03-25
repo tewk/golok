@@ -8,7 +8,7 @@
   (require scheme/cmdline)
   
   ;; version header -- should be in form vx.y.z(-tag)
-  (define version "v0.1.4.0")
+  (define version "v1.2.0")
   
   ; parsed values of command line arguments
   ; currently size 11
