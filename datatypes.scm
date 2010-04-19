@@ -41,6 +41,7 @@
          cons-to-vec
          append-to-vec
          cons-to-hash
+         symbol<?      
 
         state->process
 
@@ -212,3 +213,11 @@
       ((null? ls) -1)
       ((equal? item (car ls)) index)
       (#t (item-index-rec item (add1 index) (cdr ls))))))
+
+
+;;
+;; wrapper for string<? on symbols
+;;
+(define (symbol<? x y)
+  (string<? (symbol->string x) (symbol->string y)))
+

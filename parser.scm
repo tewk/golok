@@ -281,7 +281,10 @@
                   ; first do some quick sanity checks
                   (if (zero? (length p_processes)) (raise-user-error 'PARSE "no processes defined!") (void))
                   (if (zero? (length p_add-rules)) (raise-user-error 'PARSE "no addition rules defined!") (void))
-                  (let* ([procs (map p_proc2proc p_processes)]
+                  (let* ([procs (sort (map p_proc2proc p_processes)
+                                          (lambda (x y)
+                                            (string<? (symbol->string (process-name x)) 
+                                                      (symbol->string (process-name y)))))]
                          [add-rules (map parse-rule p_add-rules)]
                          [the-topo (parse-topo p_transitions)]
                          [names (map process-name procs)]
@@ -554,7 +557,7 @@
 (define (create-kernel filename p_links)
   (let* ([links (map parse_link p_links)]
          [counts (count-links links)])
-    (make-topology filename counts links)))
+    (make-topology filename (sort counts (lambda (x y) (symbol<? (car x) (car y)))) links)))
 
 ;;
 ;; (list-of link?

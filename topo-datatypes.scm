@@ -208,7 +208,7 @@
 
 ; (list-of-links result-from-verify-and-build-offsets) -> listing of each process, process type, and input id
 (define build-model
-  (lambda (lol offset-table) 
+  (lambda (lol offset-table)
     (let* ([size (ot_size offset-table)]
            [vect (make-vector size (list))]
            [dummy (for-each (lambda (x) (add-link x vect offset-table)) lol)])

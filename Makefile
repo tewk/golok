@@ -1,6 +1,9 @@
 golok: lookup-table.scm datatypes.scm model-builder.scm search.scm golok.scm find-k.scm parser.scm topo-datatypes.scm
 	mzc --exe golok golok.scm
 
+test:
+	./run-all.sh
+
 render:
 	output/render.sh
 
