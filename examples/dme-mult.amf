@@ -19,7 +19,9 @@ SND: [ Start, epsilon ] -> [ Idle, token2 ]
 topology {
   connectivity {
     critical 0 -- forward 0
-    forward 0 -- critical 0
+    forward 0 -- critical 1
+    critical 1 -- forward 1
+    forward 1 -- critical 0
   }
   
   # insert two new elements (a forward and a critical) into the ring

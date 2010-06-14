@@ -15,7 +15,8 @@ LEAVE:	[ Cs, in ] -> [ Idle , token ]
 topology {
 
   connectivity {
-    node 0 -- node 0
+    node 0 -- node 1
+    node 1 -- node 0
   }
   
   additionrule plain-add {
