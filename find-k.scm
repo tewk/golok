@@ -130,16 +130,17 @@
       ; sanity check on file (mostly to prevent pathlist-closure from being called on a directory)
       (if (not (file-exists? filename)) (raise-user-error filename " not found!")
             ; save the path of filename
-         (let ([cl (pathlist-closure (list filename))])
+         (let ([cl (path->complete-path (string->path filename))])
+          (let-values ([(amf-dir amf-file dir?) (split-path cl)])
             (begin
-              (set! amf-directory (path->string (list-ref cl (- (length cl) 2))))
+              (set! amf-directory amf-dir)
               (if (not output-directory) (set! output-directory amf-directory) (void)))
               (set! prot (parse-amf-file filename))
               (set! base-name (parse-filename filename))
               (set! start-time (current-seconds))
               
               ; k is current system instance
-              (set! k (protocol-kernel prot))))))
+              (set! k (protocol-kernel prot)))))))
 
   (define parse-filename
     (lambda (fn)
@@ -202,7 +203,8 @@
 
   (define dump-solution
     (lambda ()
-      (let ([output-name (string-append output-directory "/" (strip-folder base-name) "-cutoff.topo")])
+      (let ([output-name (simplify-path (build-path output-directory
+                                (string-append (strip-folder base-name) "-cutoff.topo")))])
         (begin
           (topology->file k output-name)
           (display-ln "The cut-off system has " (topology->string k) " processes.")
@@ -316,13 +318,5 @@
 ; (string?) -> (string?)
 (define strip-folder
   (lambda (x)
-    (let ([rev-chars (reverse (string->list x))])
-      (list->string (reverse (strip-folder-rec rev-chars))))))
-
-; (list-of char?) -> (list-of char?)
-(define strip-folder-rec
-  (lambda (x)
-     (cond
-        ((null? x) '())
-        ((or (eq? (car x) #\/) (eq? (car x) #\\)) '())
-        (#t (cons (car x) (strip-folder-rec (cdr x)))))))
+    (let-values ([(dir-path file dir?) (split-path x)])
+      (path->string file))))

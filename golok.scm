@@ -8,7 +8,7 @@
   (require scheme/cmdline)
   
   ;; version header -- should be in form vx.y.z(-tag)
-  (define version "v1.2.0")
+  (define version "v1.2.1")
   
   ; parsed values of command line arguments
   ; currently size 11
@@ -44,7 +44,7 @@
   (define dump #f)
 
   ; output directory
-  (define output-directory "output")
+  (define output-directory #f)
 
   ; fast forward (skip) searching n levels of bfs tree
   ; TODO: not implemented
