@@ -9,6 +9,9 @@
 
 #lang scheme
 
+;; for docs
+(require scribble/base scribble/srcdoc)
+
 (provide 
         ; behavioral automaton
         (struct-out automaton)
@@ -34,7 +37,7 @@
         ot_pt2zi
          
          ;; utility functions
-         display-ln
+	display-ln
          list-of-lists->list 
          los->string 
          lostrings->string

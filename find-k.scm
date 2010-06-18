@@ -194,7 +194,7 @@
                                ; (void))
                       (dump-sys
                           (model2dot (find-solution (item-index (automaton-proc-type x) processes) x)
-				                    (string-append output-directory "/" (symbol->string proc-type) "-sys.dot") npp))
+				                    (build-path output-directory (string-append (symbol->string proc-type) "-sys.dot")) npp))
                       (#t
                         (find-solution (item-index (automaton-proc-type x) processes) x)))))
           eps-auts))
@@ -221,7 +221,7 @@
              [mask (remove name names)])
         (let-values ([(tt oneE-builder) (build-oneEmodel-builder prot)])
           (let ([dummy0 (if dump-1E (model2dot (oneE-builder name start-aut (map (lambda (x) (item-index x names)) npp))
-                      (string-append output-directory "/" (symbol->string name) "-1e.dot") #:show-buf #f) (void))])
+                      (build-path output-directory (string-append (symbol->string name) "-1e.dot")) #:show-buf #f) (void))])
         (let-values ([(soln data) (search prot k name dfs start-aut
                                                          #:pruning pruning
                                                          #:npp npp

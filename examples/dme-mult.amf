@@ -5,15 +5,14 @@
 # "normal" nodes and pass nodes (as in "Automating Cut-off..")
 #
 #
-process critical {
-ENTER:	[ Idle,  token2 ] -> [ Cs , in ]
-LEAVE:	[ Cs , in ] -> [ Idle , token ]
-
-}
-
 process forward {
 IDLE: [ Idle, token ] -> [ Idle, token2 ]
 SND: [ Start, epsilon ] -> [ Idle, token2 ]
+}
+
+process critical {
+ENTER:	[ Idle,  token2 ] -> [ Cs , in ]
+LEAVE:	[ Cs , in ] -> [ Idle , token ]
 }
 
 topology {

@@ -658,7 +658,6 @@
                                         [to-id (get-id (state->representative (todo->next-state z) sp) db)])
                                    (add-trans-to-set! (todo-state z) (todo->label to-id z) db)))
                                (filter (lambda (g) (and (hash-has-key? db (state->representative (todo->next-state g) sp)) (hash-has-key? db (state->representative (todo-state g) sp)))) todos)))))
-
         (let ([vect (make-vector (hash-count db))])
           (begin
             (hash-for-each db (lambda (x y)
