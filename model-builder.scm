@@ -56,11 +56,9 @@
          ; shared for check-specific.scm and search.scm
          (struct-out mprocess))
 
-(require "datatypes.scm")
-
-(require "lookup-table.scm")
-
-(require "parser.scm")
+(require "datatypes.scm"
+         "lookup-table.scm"
+         "parser.scm")
 
 
 ;; !!! LOCAL MAGIC VARIABLES !!!
@@ -99,71 +97,68 @@
 (define todo->next-state todo-new-state)
 
 ;; global function
-(define init-stepper
-  (lambda (prot topo-obj [verbose #f])
-    (let ([lookup-table (create-lookup-table (protocol-ba prot))])
-      (let-values ([(initial-auts topo-raw) (instantiate-protocol prot topo-obj)])
-        (let-values ([(topo start-state) (topo-description&initial-auts->topo-hash&start topo-raw initial-auts lookup-table)])
-          (values
-           (lambda (state [proc-mask (list)] [to-todos? #f])
-             (let ([todos (state->todos state topo lookup-table proc-mask)])
-               (if to-todos? todos
-                   (map todo->next-state todos)))) start-state lookup-table topo))))))
+(define (init-stepper prot topo-obj [verbose #f])
+  (define lookup-table (create-lookup-table (protocol-ba prot)))
+  (define-values (initial-auts topo-raw) (instantiate-protocol prot topo-obj))
+  (define-values (topo start-state) (topo-description&initial-auts->topo-hash&start topo-raw initial-auts lookup-table))
+  (define (f state [proc-mask (list)] [to-todos? #f])
+    (define todos (state->todos state topo lookup-table proc-mask))
+    (if to-todos? 
+        todos
+        (map todo->next-state todos))) 
+  (values f start-state lookup-table topo))
 
 ;;;;;;;;;;;;;;;;;;;
 ;;;; global function to create a model based on an initial state, full list of automata, and topo
 ;;;;;;;;;;;;;;;;;;;
-(define build-sysNmodel-builder
-  (lambda (prot) 
-    (let ([lookup-table (create-lookup-table (protocol-ba prot))])
-      (lambda (topo-obj [verbose #f])
-        (let-values ([(initial-auts topo-raw) (instantiate-protocol prot topo-obj)])
-          (let-values ([(topo start-state) (topo-description&initial-auts->topo-hash&start topo-raw initial-auts lookup-table)])
-            (let* ([md (build-model start-state lookup-table topo)]
-                   [model (hash->model md lookup-table topo start-state)])
-              (make-model model lookup-table)))))))) 
+(define (build-sysNmodel-builder prot) 
+  (define lookup-table (create-lookup-table (protocol-ba prot)))
+  (lambda (topo-obj [verbose #f])
+    (define-values (initial-auts topo-raw) (instantiate-protocol prot topo-obj))
+    (define-values (topo start-state) (topo-description&initial-auts->topo-hash&start topo-raw initial-auts lookup-table))
+    (define md (build-model start-state lookup-table topo))
+    (define model (hash->model md lookup-table topo start-state))
+    (make-model model lookup-table))) 
 
 
 ;returns a model builder (which returns compact representations of 1e
 ; and the trans-table
-(define build-oneEmodel-builder
-  (lambda (prot)
-    (let ([tt (create-lookup-table (protocol-ba prot) #t)])
-      (values
-       tt
-       (lambda (proc-type initial-aut id-mask [verbose #f])
-         (let* ([all-aut (protocol-ba prot)]
-                ; set the global eps-id from the lookup table
-                [dmy (set! eps-id (msg->msg-id eps tt))]
-              ;  [initial-aut
-              ;   (let* ([record (filter (lambda (x) (and
-              ;                                       (equal? (car x) proc-type)
-              ;                                       (= (cadr x) 0))) (protocol-start-conf prot))])
-              ;     (if (not (null? record)) (caddar record) (car (filter (lambda (z) (equal? proc-type (automaton-proc-type z))) all-aut))))]
-                [state-id (state->state-id (vector (automaton-proc-type initial-aut) (automaton-name initial-aut) #f) tt)]
-                [initial-state (list (state->process state-id))]
-                                   
-            ;    [initial-state (if (eq? (automaton-in-msg initial-aut) eps) 
-            ;                       (collect-all-eps initial-aut all-aut tt) 
-                [dummy2 (if verbose (display-ln "Building oneEmodel...") (void))]
-                [md (build-model initial-state tt)]
-                [model (hash->model md tt oneE-flag initial-state)]
-                ;; now filter out the taus and object transition types
-                [stripped (strip-taus model id-mask tt)]
-                ;; remove all duplicate paths
-                [cleaned-model (reduce-model stripped)]
-                ;; remove lonely nodes (without transitions to or from)
-                [finished (compactify cleaned-model)])
-           (make-model finished tt)))))))
+(define (build-oneEmodel-builder prot)
+  (define tt (create-lookup-table (protocol-ba prot) #t))
+  (define (f proc-type initial-aut id-mask [verbose #f])
+    (define all-aut (protocol-ba prot))
+    ; set the global eps-id from the lookup table
+    (set! eps-id (msg->msg-id eps tt))
+    ;  [initial-aut
+    ;   (let* ([record (filter (lambda (x) (and
+    ;                                       (equal? (car x) proc-type)
+    ;                                       (= (cadr x) 0))) (protocol-start-conf prot))])
+    ;     (if (not (null? record)) (caddar record) (car (filter (lambda (z) (equal? proc-type (automaton-proc-type z))) all-aut))))]
+    (define state-id (state->state-id (vector (automaton-proc-type initial-aut) (automaton-name initial-aut) #f) tt))
+    (define initial-state (list (state->process state-id)))
+    ;    [initial-state (if (eq? (automaton-in-msg initial-aut) eps) 
+    ;                       (collect-all-eps initial-aut all-aut tt) 
+    (when verbose (display-ln "Building oneEmodel..."))
+
+    (define md (build-model initial-state tt))
+    (define model (hash->model md tt oneE-flag initial-state))
+    ;; now filter out the taus and object transition types
+    (define stripped (strip-taus model id-mask tt))
+    ;; remove all duplicate paths
+    (define cleaned-model (reduce-model stripped))
+    ;; remove lonely nodes (without transitions to or from)
+    (define finished (compactify cleaned-model))
+    (make-model finished tt))
+
+  (values tt f))
 
 
 ;; simple front-end to compact-model 
 (define (compactify model)
-  (let ([mapper (make-hash)])
-    (begin
-      ; mark all reachable elements
-      (mark-elements-rec model 0 mapper)
-      (compact-model model mapper))))
+  (define mapper (make-hash))
+  ; mark all reachable elements
+  (mark-elements-rec model 0 mapper)
+  (compact-model model mapper))
 
 
 
