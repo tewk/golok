@@ -25,6 +25,12 @@
   ; search: (prot topology proc-type) -> (#t simulating-model) | (#f max-count)
   search)
 
+(define-syntax-rule (for/filter ([x xr]) body)
+  (reverse (for/fold ([r null]) ([x xr])
+  (define body-result (begin body))
+  (if body-result
+    (cons x r)
+    r))))
 ;;;;;;;;;;;;;;;;;;;;
 ; global variables ;
 
@@ -131,8 +137,9 @@
   (define-values (stepper ss lookup-table topo-hash) (init-stepper prot topo))
 
   ; save the ids of all parameterized system types 
-  (set! npp-ids (map (lambda (x) (item-index x (protocol-process-names prot))) npp))
-  (set! pp-ids (filter (lambda (x) (not (member x npp-ids))) (build-list (length (protocol-process-names prot)) values)))
+  (define prot-process-names (protocol-process-names prot))
+  (set! npp-ids (for/list ([x npp]) (item-index x prot-process-names)))
+  (set! pp-ids (for/filter ([x (in-range (length prot-process-names))]) (not (member x npp-ids))))
 
   ; enable/disable pruning
   (set! start-state-filter (if pr start-aut-filter (lambda (x) #t)))
@@ -354,7 +361,7 @@
   ;
   ; max-trace is the longest (incomplete) "trace" of the 1e model
   (define (update-trace eq-map)
-    (define ln (length (list-of-lists->list (vector->list eq-map))))
+    (define ln (for/fold ([s 0]) ([x (in-vector eq-map)]) (+ s (length x))))
     (when (> ln max-trace) (set! max-trace ln)))
 
   (cond
@@ -366,6 +373,21 @@
     [(member index (hash-ref! unsat state (list))) #f]
     ; otherwise, expand all possible branches
     [else
+      ; condense: (list-of todo, oneE transition index to match) -> #f | (list-of (list-of todo))
+      (define (condense todos index)
+        (define possible-list
+          (for/list ([x (vector-ref (vector-ref oneE index) 1)])
+            (define x0 (vector-ref x 0))
+            (define x1 (vector-ref x 1))
+            (for/filter ([y todos])
+              (and 
+                (= x0 (todo-msg y))
+                (= x1 (todo-msg2 y))))))
+            
+        ; if there are any empties (1e transitions which are not simulated), fail
+        (if (member (list) possible-list) 
+            #f 
+            possible-list))
       ; first collect all states reachable via tau transitions
       (define starts (explode state pp-ids))
       ; then collect all the proc-type transitions possible from the start set
@@ -402,20 +424,6 @@
           ; make sure all transitions are simulated recursively
           (fit-children state check-list (vector-ref (vector-ref oneE index) 1) new-em index)])]))
 
-  ; condense: (list-of todo, oneE transition index to match) -> #f | (list-of (list-of todo))
-(define (condense todos index)
-  (define possible-list
-    (for/list ([x (vector-ref (vector-ref oneE index) 1)])
-      (filter (lambda (y) 
-                (and 
-                    (= (vector-ref x 0) (todo-msg y))
-                    (= (vector-ref x 1) (todo-msg2 y))))
-              todos)))
-      
-  ; if there are any empties (1e transitions which are not simulated), fail
-  (if (member (list) possible-list) 
-      #f 
-      possible-list))
 
  ; return a list of *all* states reachable without using a transition in proc-mask
  ;  (including the passed state)
@@ -559,10 +567,9 @@
       (hash-set! end-db (state->representative end-state) #t)
       (define possibles (remove-duplicates (expand start-state pp-ids #t)))
       ; since there *is* a path to the end-state, this ormap always gives a non #f result
-      ;
       ; if it *does* return false, there is an error in our search algorithm
-      (define success? (ormap (lambda (x) (connect-taus-rec x end-db db (make-hash))) possibles))
-      (when (not success?) (error "there is a bug in search!"))]))
+      (or (for/or ([x possibles]) (connect-taus-rec x end-db db (make-hash)))
+          (error "there is a bug in search!"))]))
 
 ; returns a list or #f: #f on failure or (list todo final-state)
 ;     the todo which started this level and the final edge state
@@ -715,9 +722,7 @@
         (#t (order-by-number (cdr x) (cdr y)))))))
 
 ; like order-by-number, except for simple lists of integers
-;
 ; returns -1 if x < y
-;
 ; WARNING: assumes x and y are non-equal
 (define (which-is-first? x y)
   (let ([x1 (car x)]
