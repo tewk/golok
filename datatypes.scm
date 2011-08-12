@@ -206,16 +206,11 @@
 ;;
 ;; or -1 if not a member
 ;;
-(define item-index
-  (lambda (item ls)
-    (item-index-rec item 0 ls)))
-
-(define item-index-rec
-  (lambda (item index ls)
-    (cond
-      ((null? ls) -1)
-      ((equal? item (car ls)) index)
-      (#t (item-index-rec item (add1 index) (cdr ls))))))
+(define (item-index item ls [index 0])
+  (cond
+    [(null? ls) -1]
+    [(equal? item (car ls)) index]
+    [else (item-index item (cdr ls) (add1 index))]))
 
 
 ;;
