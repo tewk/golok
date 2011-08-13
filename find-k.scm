@@ -40,6 +40,7 @@
   ;;
   ;; search: (protocol topology proc-type ...) -> (values #t vector-model) | (values #f max-trace-integer)
   (require "search.scm")
+(require "macros.rkt")
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;;;; gobal variables ;;;;;
@@ -49,28 +50,23 @@
 
 ;(initialized by init-clo)
 
-; info level
-(define debug 0)
-
-; model size to halt after
-(define max-secs #f)
-
-;; write out all 1E models
-(define dump-1E #f)
+(define debug 0) ; info level
+(define max-secs #f) ; model size to halt after
+(define dump-1E #f) ;; write out all 1E models
 (define dump-sys #f)
+(define output-directory #f)
 (define dfs #f)
 (define ring #f)
 (define star (list))
 (define start-depth #f)
-(define process-type #f)
 (define stop-depth #f)
+(define process-type #f)
+(define dump #f) ; dump depth
+(define npp (list))
 (define pruning #t)
 
-; dump depth
-(define dump #f)
 
 ; list of non-paramterized process names
-(define npp (list))
 
 ;; TODO: figure out if there is any better way for 
 ;;        passing arguments across modules
@@ -79,41 +75,25 @@
 ;;
 ;; set globals passed via command line arguments
 (define (init-clo arg-list)
-  (set! debug (car arg-list))
-  (set! max-secs (cadr arg-list))
-  (set! dump-1E (caddr arg-list))
-  (set! dump-sys (cadddr arg-list))
+  (set! debug            (list-ref arg-list 0))
+  (set! max-secs         (list-ref arg-list 1))
+  (set! dump-1E          (list-ref arg-list 2))
+  (set! dump-sys         (list-ref arg-list 3))
   (set! output-directory (list-ref arg-list 4))
-  (set! dfs (list-ref arg-list 5))
-  (set! ring (list-ref arg-list 6))
-  (set! start-depth (list-ref arg-list 7))
-  (set! stop-depth (list-ref arg-list 8))
-  (set! process-type (list-ref arg-list 9))
-  (set! star (list-ref arg-list 10))
-  (set! dump (list-ref arg-list 11))
-  (set! npp (list-ref arg-list 12))
-  (set! pruning (list-ref arg-list 13)))
+  (set! dfs              (list-ref arg-list 5))
+  (set! ring             (list-ref arg-list 6))
+  (set! start-depth      (list-ref arg-list 7))
+  (set! stop-depth       (list-ref arg-list 8))
+  (set! process-type     (list-ref arg-list 9))
+  (set! star             (list-ref arg-list 10))
+  (set! dump             (list-ref arg-list 11))
+  (set! npp              (list-ref arg-list 12))
+  (set! pruning          (list-ref arg-list 13)))
 
 ;;; internals ;;;
 
 ;(initialized by init-internals)
-  
-; protocol
-(define prot #f)
-
-; base name for output files
-(define base-name #f)
-
-; current topology-struct
-(define k #f)
-
-;; time at find-k call
-(define start-time #f)
-
 ;; output directory
-(define output-directory #f)
-
-(define amf-directory #f)
 
 (define (init-internals filename)
  ; sanity check on file (mostly to prevent pathlist-closure from being called on a directory)
@@ -124,14 +104,12 @@
  (define cl (path->complete-path (string->path filename)))
  (define-values (amf-dir amf-file dir?) (split-path cl))
 
- (set! amf-directory amf-dir)
- (unless output-directory (set! output-directory amf-directory))
- (set! prot (parse-amf-file filename))
- (set! base-name (parse-filename filename))
- (set! start-time (current-seconds))
+ (unless output-directory (set! output-directory amf-dir))
+ (define prot (parse-amf-file filename))
+ ; base name for output files
+ (define base-name (parse-filename filename))
             
- ; k is current system instance
- (set! k (protocol-kernel prot)))
+ (values prot base-name))
  
 
 
@@ -152,9 +130,11 @@
   (when (>= debug 4)
       (display-ln bar "find-k call\n\tfilename: " filename "\n\targ-list: " arg-list))
 
-  (init-internals filename)
+  (define-values (prot base-name) (init-internals filename))
+  ; k is current system instance
+  (define k (protocol-kernel prot))
 
-  (define eps-auts (filter (lambda (z) (equal? eps (automaton-in-msg z))) (protocol-ba prot)))
+  (define eps-auts (for/filter ([z (protocol-ba prot)]) (equal? eps (automaton-in-msg z))))
   (define starts
     (cond
       [process-type
@@ -170,25 +150,25 @@
         (build-list (length (protocol-process-names prot)) values)]))
     
   ;; TODO: clean this up... should 
-  (for ([x eps-auts])
+  (let ([k (for/fold ([k k])([x eps-auts])
     (define processes (protocol-process-names prot))
     (define proc-type (automaton-proc-type x))
     (define proc-mask (remove proc-type processes))
     (cond
       ; if this is a non-parameterized process type, skip
-      [(member (automaton-proc-type x) npp) (void)]
+      [(member (automaton-proc-type x) npp) k]
       ; if this is an epsilon initiated process and not starting from its start, skip
       ; ((and (member (list-ref processes x) (map automaton-proc-type eps-auts)) (not (equal? (automaton-proc-type start-aut) (list-ref processes x))))
       ; (void))
-      [dump-sys
-        (model2dot (find-solution (item-index (automaton-proc-type x) processes) x)
-                   (build-path output-directory (string-append (symbol->string proc-type) "-sys.dot")) npp)]
       [else
-        (find-solution (item-index (automaton-proc-type x) processes) x)]))
+        (define-values (new-k data) (find-solution k (item-index (automaton-proc-type x) processes) prot x))
+        (when dump-sys
+          (model2dot data (build-path output-directory (string-append (symbol->string proc-type) "-sys.dot")) npp))
+        new-k]))])
 
-  (dump-solution))
+    (dump-solution-to-file k base-name)))
 
-(define (dump-solution)
+(define (dump-solution-to-file k base-name)
   (define output-name (simplify-path (build-path output-directory (string-append (strip-folder base-name) "-cutoff.topo"))))
   (topology->file k output-name)
   (display-ln "The cut-off system has " (topology->string k) " processes.")
@@ -197,15 +177,22 @@
     (display-ln "and <process names>-sys.dot for simulating paths.")))
 
   ;; TODO: clean up find-solution and find-solution-rec
-(define (find-solution id start-aut)
+(define (find-solution k id prot start-aut)
   (define names (protocol-process-names prot))
   (define name (list-ref names id))
-  (define mask (remove name names))
+#|
+  (pretty-print k)
+  (pretty-print id)
+  (pretty-print prot)
+  (pretty-print start-aut)
+  (pretty-print names)
+|#
   (when dump-1E 
         (define-values (tt oneE-builder) (build-oneEmodel-builder prot))
         (model2dot (oneE-builder name start-aut (map (lambda (x) (item-index x names)) npp))
                    (build-path output-directory (string-append (symbol->string name) "-1e.dot")) 
                    #:show-buf #f))
+
   (define-values (soln data) (search 
                                prot 
                                k 
@@ -221,16 +208,11 @@
                                #:stop stop-depth))
   (if soln  
       ; if soln == #t, then data is a model containing the simulating subset of the system
-      data
-      (find-solution-rec id start-aut names 0 data)))
+      (values k data)
+      (find-solution-rec k id prot start-aut names 0 data #f 0)))
 
 
 ;; if we try all addition rules and none work, which rule should be applied before looping over them again
-(define next-id-to-inc 0)
-
-;; did we increment the model in this loop?
-(define made-a-change #f)
-
   ;
   ; TODO: clearly define an ordering for increasing processes
   ;
@@ -240,17 +222,16 @@
   ; prev_ch: index of the last applied rule
   ; cur_ch: index of the rule to apply
   ; best-trace: integer measure of how close model has come to simulating 1e
-(define (find-solution-rec id start-aut names cur_ch best-trace)
+(define (find-solution-rec k id prot start-aut names cur_ch best-trace made-a-change next-id-to-inc)
   (define rules (protocol-addition-rules prot))
   (define rule (list-ref (protocol-addition-rules prot) cur_ch))
   (define size (length rules))
-  (define mask (remove (list-ref names id) names))
 
   ; if this rule cannot be applied to this model, skip and move on
   (cond
     [(zero? (rule 'query k))
       (when (>= debug 4) (display-ln "-------\n" "rule " rule " cannot be applied... skipping"))
-      (find-solution-rec id names (modulo (add1 cur_ch) size) best-trace)]
+      (find-solution-rec k id prot names (modulo (add1 cur_ch) size) best-trace made-a-change next-id-to-inc)]
     [else 
       (define new-k (rule 'apply k))
       (define-values (soln data) (search prot new-k (list-ref names id) dfs start-aut
@@ -263,33 +244,27 @@
       (cond 
         ; new configuration simulates
         [soln
-          (set! k new-k)
-          data]
+          (values new-k data)]
 
         ; new configuration provides longer trace of oneE behavior 
         [(> data best-trace)
-          (set! k new-k)
-          (set! made-a-change #t)
-          (find-solution-rec id start-aut names (modulo (+ 1 cur_ch) size) data)]
+          (find-solution-rec new-k id prot start-aut names (modulo (+ 1 cur_ch) size) data #t next-id-to-inc)]
 
         ; is the the last rule before trying them all again?
         [(= 0 (modulo (+ 1 cur_ch) size))
           ;; TODO: fix this... it could fail if the current next-id-to-inc rule cannot be applied
           (cond
             [made-a-change
-              ; clear the flag and continue
-              (set! made-a-change #f)
-              (find-solution-rec id start-aut names (modulo (+ 1 cur_ch) size) best-trace)]
+              (find-solution-rec k id prot start-aut names (modulo (+ 1 cur_ch) size) best-trace #f next-id-to-inc)]
             [else
               ; otherwise apply the next rule
-              (set! made-a-change #f)
-              (set! k ((list-ref (protocol-addition-rules prot) next-id-to-inc) 'apply k))
-              (set! next-id-to-inc (modulo (+ 1 cur_ch) size))
-              (find-solution-rec id start-aut names (modulo (+ 1 cur_ch) size) best-trace)])]
+              (define new-k ((list-ref (protocol-addition-rules prot) next-id-to-inc) 'apply k))
+              (define new-next-id-to-inc (modulo (+ 1 cur_ch) size))
+              (find-solution-rec new-k id prot start-aut names (modulo (+ 1 cur_ch) size) best-trace #f new-next-id-to-inc)])]
 
         [else
            ; otherwise just continue to the next rule
-           (find-solution-rec id start-aut names (modulo (+ 1 cur_ch) size) best-trace)])]))
+           (find-solution-rec new-k id prot start-aut names (modulo (+ 1 cur_ch) size) best-trace made-a-change next-id-to-inc)])]))
 
 
 ; depreciated

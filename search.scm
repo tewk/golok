@@ -11,26 +11,18 @@
 (require "datatypes.scm") ; trans struct type
 (require "parser.scm") ; for process-protocol-names
 (require "topo-datatypes.scm") ; for topology->string
-
 ; for init-stepper
-;
 ; init-stepper: (prot topology) -> (step-function first-state)
-;
 ; step-function: (state [proc-mask (list)]) -> (list-of next-states)
 (require "model-builder.scm")
 (require "perm.scm") ; for generate-permutations
 (require "lookup-table.scm") ; for state->state-id
+(require "macros.rkt")
 
 (provide
   ; search: (prot topology proc-type) -> (#t simulating-model) | (#f max-count)
   search)
 
-(define-syntax-rule (for/filter ([x xr]) body)
-  (reverse (for/fold ([r null]) ([x xr])
-  (define body-result (begin body))
-  (if body-result
-    (cons x r)
-    r))))
 ;;;;;;;;;;;;;;;;;;;;
 ; global variables ;
 
@@ -348,6 +340,7 @@
 ; (note the the state may not match the entry-state, but the state is reachable through 
 ; tau transitions)
 (define (search-node state)
+  ;(printf "STATE: ~a\n" state)
   (cond 
     ; fail fast if already in unsat map
     [(member 0 (hash-ref! unsat state (list))) #f]
@@ -513,24 +506,21 @@
 ; (so if start-state is not equal to todo-state, there is a tau link between them,
 ; and the transition from todo-state to todo->next-state is of this process type)
 ;
-(define process-entry!
-  (lambda (entry db)
-    (let* ([start-state (car entry)]
-            ; ensure start-state is in the db
-           [ss-id (get-id start-state db)])
-      ; all all transitions
-      (for-each (lambda (x) 
-                  (let ([td (car x)])
-                ; edge-state is the initial state of the transition described by 
-                ; each todo x
-                ;
-                ; if start-state does not equal the initial state of the proc-type transition,
-                ; then at least one tau transition needed to happen, first
-                    (begin
-                     (if (not (equal? start-state (todo-state td)))
-                         (connect-taus! start-state (todo-state td) db)
-                         (void))
-                      (add-td-to-db! td db)))) (cadr entry)))))
+(define (process-entry! entry db)
+  (define start-state (car entry))
+  ; ensure start-state is in the db
+  (define ss-id (get-id start-state db))
+  ; all all transitions
+  (for ([x (cadr entry)])
+    (define td (car x))
+    ; edge-state is the initial state of the transition described by 
+    ; each todo x
+    ;
+    ; if start-state does not equal the initial state of the proc-type transition,
+    ; then at least one tau transition needed to happen, first
+    (when (not (equal? start-state (todo-state td)))
+        (connect-taus! start-state (todo-state td) db))
+     (add-td-to-db! td db)))
 
 (define (add-td-to-db! td db)
   ;;
