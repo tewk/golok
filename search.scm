@@ -306,7 +306,7 @@
     (define new-fringe (get-fringe depth state-space fringe))
     ; list of states in new fringe
     (define gr (if new-fringe (hash-map new-fringe (lambda (x y) x)) #f))
-    (when (>= debug 2) (display-ln "\tdepth " depth " fringe has " (if gr (length gr) 0)))
+    (when (>= debug 2) (display-ln "\tdepth " depth " fringe has " (if new-fringe (hash-count new-fringe) 0)))
 
     (cond 
       ; there are no more states to search
