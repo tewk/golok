@@ -220,7 +220,7 @@
   ; result is either a simulating subset model or false
   (define states-explored (make-hash))
   (let ([result (if dfs (search-dfs start-state) 
-                        (search-bfs 0 states-explored dump))])
+                        (search-bfs 0 states-explored stepper dump))])
     (cond 
       ((and (not (equal? #f dump)) (model? result))
         (begin
@@ -260,7 +260,7 @@
                (ormap (lambda (x) (search-dfs x store)) possible-starts)])))]))
         
 ; search state space with BFS
-(define (search-bfs depth states-explored [dump #f])
+(define (search-bfs depth states-explored stepper [dump #f])
   ; reset the global space
   ;; hash-map of states already checked for simulation  (keys: system-states, values: #t)
   (define state-space (make-hash))
@@ -269,29 +269,25 @@
     (define (get-fringe depth state-space fringe)
       ; this is basically called once since the parameter of depth is "1" 
       ; and then the fringe is returned
-      (define (get-fringe-rec state-space fringe depth)
-        (define fr (hash-map fringe (lambda (x y) x)))
+      (define (get-fringe-rec  depth state-space fringe)
         (cond
           ; if fringe empty, return fail
-          [(= 0 (length fr)) #f]
+          [(= 0 (hash-count fringe)) #f]
           ; return fringe
           [(= 0 depth) fringe]  ;(begin (display-ln "The state space is " (hash-count state-space)"\n")fringe))
           ; otherwise expand next
           [else
             (define new-fr (make-hash))
-            (define new-states (filter (lambda (y) (not (hash-has-key? state-space y)))
-                               (remove-duplicates (list-of-lists->list (map expand fr)))))
-            ; remove all states that do not have a process of proc-type in the 
-            ; initial state
-            ; (because they cannot possibly simulate)
-            (define possible-starts (filter start-state-filter new-states))
-            ; create new fringe
-            (for ([x possible-starts]) (hash-set! new-fr x #t))
-            ; add all states to state-space
-            (for ([x possible-starts]) (hash-set! state-space x #t))
+            (define proc-mask (list))
+            (for ([x (in-hash-keys fringe)])
+              (for ([y (stepper x proc-mask)])   
+                (when (and (not (hash-has-key? state-space y))
+                           (start-state-filter y))
+                  (hash-set! new-fr y #t)
+                  (hash-set! state-space y #t))))
+                   
             ;(display-ln "The count of state space is "(hash-count state-space) "\n")
-            (get-fringe-rec state-space new-fr (sub1 depth))]))
-
+            (get-fringe-rec (sub1 depth) state-space new-fr)]))
       (cond
         ; if this is the first time called (and state space has one element), just return the first guy
         [(= 0 (hash-count state-space))
@@ -300,23 +296,23 @@
           fringe]
         ; expand once and return results
         [else
-           (get-fringe-rec state-space fringe 1)]))
+           (get-fringe-rec 1 state-space fringe)]))
+
 
     ; new-fringe is a hash-map with new states as keys
     (define new-fringe (get-fringe depth state-space fringe))
     ; list of states in new fringe
-    (define gr (if new-fringe (hash-map new-fringe (lambda (x y) x)) #f))
     (when (>= debug 2) (display-ln "\tdepth " depth " fringe has " (if new-fringe (hash-count new-fringe) 0)))
 
     (cond 
       ; there are no more states to search
-      [(not gr)
+      [(not new-fringe)
         (if dump
             (make-model (hash->model state-space lt topo-ht start-state state->representative) lt)
             #f)]
       [else
         ; check if some fringe node is the start of 1e simulating chunk
-        (define sim (for/or ([x gr]) (search-node x states-explored)))
+        (define sim (for/or ([x (in-hash-keys new-fringe)]) (search-node x states-explored)))
         (cond 
           ; if we found a solution, return it
           [sim sim]
