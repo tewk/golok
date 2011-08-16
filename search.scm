@@ -260,12 +260,10 @@
                (ormap (lambda (x) (search-dfs x store)) possible-starts)])))]))
         
 ; search state space with BFS
-(define (search-bfs depth states-explored stepper [dump #f])
+(define (search-bfs depth states-explored stepper [dump #f] [state-space (make-hash)] [fringe (make-hash)])
   ; reset the global space
   ;; hash-map of states already checked for simulation  (keys: system-states, values: #t)
-  (define state-space (make-hash))
-
-  (define (search-bfs-rec depth fringe dump)
+;  (define (search-bfs-rec depth fringe dump)
     (define (get-fringe depth state-space fringe)
       ; this is basically called once since the parameter of depth is "1" 
       ; and then the fringe is returned
@@ -321,9 +319,7 @@
             (make-model (hash->model state-space lt topo-ht start-state state->representative) lt)]
           ; otherwise, keep going
           [else
-            (search-bfs-rec (add1 depth) new-fringe (if dump (sub1 dump) #f))])]))
-
-  (search-bfs-rec depth (make-hash) dump))
+            (search-bfs (add1 depth) states-explored stepper (if dump (sub1 dump) #f) state-space new-fringe)])]))
 
 
 ;;;;;;;;;;;;;;;;; end search ;;;;;;;;;;;;;;;;;;
