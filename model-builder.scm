@@ -131,18 +131,13 @@
 (define (build-oneEmodel-builder prot)
   (define tt (create-lookup-table (protocol-behavior-automata prot) #t))
   (define (f proc-type initial-aut id-mask [verbose #f])
-    (define all-aut (protocol-behavior-automata prot))
+
     ; set the global eps-id from the lookup table
     (set! eps-id (msg->msg-id eps tt))
-    ;  [initial-aut
-    ;   (let* ([record (filter (lambda (x) (and
-    ;                                       (equal? (car x) proc-type)
-    ;                                       (= (cadr x) 0))) (protocol-start-conf prot))])
-    ;     (if (not (null? record)) (caddar record) (car (filter (lambda (z) (equal? proc-type (automaton-proc-type z))) all-aut))))]
+
     (define state-id (state->state-id (vector (automaton-proc-type initial-aut) (automaton-name initial-aut) #f) tt))
     (define initial-state (list (state->process state-id)))
-    ;    [initial-state (if (eq? (automaton-in-msg initial-aut) eps) 
-    ;                       (collect-all-eps initial-aut all-aut tt) 
+
     (when verbose (display-ln "Building oneEmodel..."))
 
     (define md (build-model initial-state tt))
@@ -394,29 +389,28 @@
 ;;
 ;; (system-state transition-table [system-topology]) -> (hash-map)
 ;;
-(define (build-model ss tt [topo oneE-flag])
-  (let* ([state-space (make-hash)]
-         [fringe (make-hash)]
-         [dmy0 (hash-set! state-space ss #t)]
-         [dmy (hash-set! fringe ss #t)])
-    (build-model-rec tt fringe state-space topo)))
+(define (build-model start-state tt [topo oneE-flag])
+  (define state-space (make-hash (list (cons start-state #t))))
+  (define fringe (make-hash (list (cons start-state #t))))
 
-(define (build-model-rec tt fr ss topo)
-  (if (zero? (hash-count fr)) ss
-      (let ([expanded (list-of-lists->list (hash-map fr (lambda (x y) 
-                                                          (map (lambda (z)
-                                                                 (todo->next-state z))
-                                                               (state->todos x topo tt)))))]
-            [new-fr (make-hash)])
-        (begin   
-          (for-each
-           (lambda (x) 
-             (if (not (hash-has-key? ss x))
-                 (begin (hash-set! ss x #t)
-                        (hash-set! new-fr x #t))
-                 (void)))
-           expanded)
-          (build-model-rec tt new-fr ss topo)))))
+  (define (build-model-rec tt fr state-space topo)
+    (cond 
+      [(zero? (hash-count fr)) state-space]
+      [else
+        (define expanded
+          (reverse
+            (for/fold ([nl null]) ([x (in-hash-keys fr)])
+              (for/fold ([nl nl]) ([z (state->todos x topo tt)])
+                (cons (todo->next-state z) nl)))))
+
+        (define new-fr (make-hash))
+        (for ([x expanded])
+          (when (not (hash-has-key? state-space x))
+            (hash-set! state-space x #t)
+            (hash-set! new-fr x #t)))
+        (build-model-rec tt new-fr state-space topo)]))
+
+  (build-model-rec tt fringe state-space topo))
 
 ;; dump a model to graphviz source
 ;;
@@ -487,25 +481,24 @@
 ;;
 ;; tt: lookup-table-struct
 ;; proc-mask: list of proc-ids not to expand
-(define state->todos
-  (lambda (state topo tt [proc-mask (list)])
-    (let ([size (length state)])
-      (flatten (map (lambda (x) (sender&msg->todos (car x) (cadr x) state tt topo proc-mask))
-                    ;; if building a oneE model, allow all possible inputs
-                    (let ([raw-input (if (equal? topo oneE-flag) 
+(define (state->todos state topo tt [proc-mask (list)])
+  (define size (length state))
+  (define raw-input 
+    (if (equal? topo oneE-flag) 
+        ;; making a 1e model... so if not in a "start state" for all automatons,
+        (if (all-process-states-even? state)
+            ;; allow anything but taus
+            (remove (list (msg->msg-id tau tt) oneE-flag) 
+                    (map (lambda (x) (list x oneE-flag)) (lookup-table->all-msgs tt)))
+            ;; allow only taus
+            (list (list (msg->msg-id tau tt) oneE-flag)))
+        ;; always include an epsilon message with a bogus sender in available message list
+        (cons (list (msg->msg-id eps tt) -1)
+              (list-of-lists->list (map (lambda (x) (collect-messages state x))
+                                        (build-list size values))))))
 
-                                        ;; making a 1e model... so if not in a "start state" for all automatons,
-                                        (if (all-process-states-even? state)
-                                          ;; allow anything but taus
-                                          (remove (list (msg->msg-id tau tt) oneE-flag) 
-                                            (map (lambda (x) (list x oneE-flag)) (lookup-table->all-msgs tt)))
-                                          ;; allow only taus
-                                          (list (list (msg->msg-id tau tt) oneE-flag)))
-                                         ;; always include an epsilon message with a bogus sender in available message list
-                                         (cons (list (msg->msg-id eps tt) -1)
-                                               (list-of-lists->list (map (lambda (x) (collect-messages state x))
-                                                                         (build-list size values)))))])
-                      raw-input))))))
+  ;; if building a oneE model, allow all possible inputs
+      (flatten (map (lambda (x) (sender&msg->todos (car x) (cadr x) state tt topo proc-mask)) raw-input)))
 
 ;;; state: list of processes
 ;;  id: index of process in passed state from which to collect messages

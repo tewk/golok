@@ -83,9 +83,7 @@
 (define-struct automaton (proc-type name state1 in-msg state2 out-msg) #:transparent)
 
 ;; create a process wrapper around an automaton
-(define state->process 
-  (lambda (state)
-    (make-mprocess state '())))
+(define (state->process state) (make-mprocess state '()))
 
 ;; 
 ;; similar to "flatten", but only unlist the top level lists

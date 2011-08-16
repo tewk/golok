@@ -36,6 +36,7 @@
 ;; returns all possible new states
 ;; (state) -> (list-of state)
 (define expand (void))
+(define expand-to (void))
 
 ;; maximum trace
 (define max-trace 0)
@@ -173,23 +174,29 @@
   ; TODO: set up branch pruning
 
   ;;; add wrapper around the expand function 
-  ;; whicch handles state reduction
+  ;; which handles state reduction
+  (define (expand-toi state to-list [proc-mask (list)] [to-todos? #f])
+    (if to-todos?
+        ;; repackage all the todos to have reduces representation
+        (for/fold ([tol to-list]) ([td (stepper state proc-mask #t)])
+          (define s1 (state->representative (todo-state td)))
+          (define s2 (state->representative (todo->next-state td)))
+          (cons
+            (make-todo s1 (todo-msg td)
+                          (todo-send-id td)
+                          (todo-recv-id td)
+                          (todo-cons-state td)
+                          (todo-msg2 td)
+                          s2)
+            tol))
+        ;; otherwise, just map all the returned states
+        (for/fold ([tol to-list]) ([x (stepper state proc-mask)])
+          (cons (state->representative x) tol))))
+
   (set! expand 
          (lambda (state [proc-mask (list)] [to-todos? #f])
-      (if to-todos?
-          ;; repackage all the todos to have reduces representation
-          (map (lambda (td)
-                  (let ([s1 (state->representative (todo-state td))]
-                        [s2 (state->representative (todo->next-state td))])
-                  (make-todo s1 (todo-msg td)
-                                (todo-send-id td)
-                                (todo-recv-id td)
-                                (todo-cons-state td)
-                                (todo-msg2 td)
-                                  s2)))
-                  (stepper state proc-mask #t))
-          ;; otherwise, just map all the returned states
-          (map state->representative (stepper state proc-mask)))))
+           (reverse (expand-to state null proc-mask to-todos?))))
+  (set! expand-to expand-toi)
 
   (set! proc-type pt)
   (set! start-aut (state->state-id (vector proc-type (automaton-state1 (process-default-aut (car 
@@ -343,7 +350,16 @@
 ; (each todo has info to represent state, labeled transition, and new state)
 ; (note the the state may not match the entry-state, but the state is reachable through 
 ; tau transitions)
+;
+;oneE example
+;#(
+;#((#(struct:mprocess 2 ())) (#(3 1 3 1)))
+;#((#(struct:mprocess 0 ())) (#(1 2 1 2) #(1 2 1 4)))
+;#((#(struct:mprocess 6 ())) (#(2 4 7 3)))
+;#((#(struct:mprocess 8 ())) (#(4 1 9 1)))
+;#((#(struct:mprocess 4 ())) (#(2 1 5 1))))
 (define (search-node state)
+  ;(pretty-print oneE)
   ;(printf "STATE: ~a\n" state)
   (cond 
     ; fail fast if already in unsat map
@@ -368,7 +384,7 @@
     [(assoc state (vector-ref eq-map index))  eq-map]
     ; if in unsatisfiability map, fail
     [(member index (hash-ref! unsat state (list))) #f]
-    ; otherwise, expand all possible branches
+    ; otherwise, expan dnd-toiall possible branches
     [else
       ; condense: (list-of todo, oneE transition index to match) -> #f | (list-of (list-of todo))
       (define (condense todos index)
@@ -429,17 +445,16 @@
   (let explode-rec ([collection (make-hash (list (cons state (void))))]
                     [fringe (make-hash (list (cons state (void))))]
                     [proc-mask proc-mask]) 
-    (define fringe-step (remove-duplicates 
-                            (list-of-lists->list 
-                                  (hash-map fringe 
-                                       (lambda (x y) (expand x proc-mask))))))
+
     (define new-fringe (make-hash))
-    ;; add all new states in fringe-step to new-fringe and collection
-    (for ([x fringe-step]) 
-      (unless (hash-has-key? collection x)
-        ;; add to new fringe and collection
-        (hash-set! collection x #t)
-        (hash-set! new-fringe x #t)))
+
+    (for ([x (in-hash-keys fringe)])
+      (for ([y (expand x proc-mask)])
+        (unless (hash-has-key? collection y)
+          ;; add to new fringe and collection
+          (hash-set! collection y #t)
+          (hash-set! new-fringe y #t))))
+
     (if (= 0 (hash-count new-fringe)) 
         (hash-map collection (lambda (x y) x))
         (explode-rec collection new-fringe proc-mask))))
@@ -449,36 +464,34 @@
 ; eq-map is the current equivalence map, and index is the index of the 1e model to simulate
 ;
 ; oneE-list is list of (vector in-msg-id out-msg-id ignore-id next-index)
-(define fit-children
-  (lambda (state check-list oneE-list eq-map index)
-    (cond
-      ((null? oneE-list) eq-map) ; all transitions found
-      ((null? check-list) (error "fit-children: logic error: check-list and oneE-list different sizes?"))
-      ((null? (car check-list)) 
-              ; didn't find a match
-              ;     add to unsat and fail
-          (begin (cons-to-hash unsat state index) 
-                  #f))
-      (#t
-          ; test the first element in the first slot
-          (let* ([next-state (todo->next-state (caar check-list))]
-                 [next-index (vector-ref (car oneE-list) 3)]
-                 [res (try-fit next-state next-index eq-map)])
-            (if res 
-                ; the next state works... now add the link between its parent and it
-              (let* ([entry (vector-ref res index)]
-                     [to-change (if (assoc state entry) (assoc state entry) 
-                                              (error "fit-children: logic error: original state entry not found"))]
-                     [new-entry-element (list state 
-                                      (cons (list (caar check-list) next-index) (cadr to-change)))]
-                     [new-entry (cons new-entry-element (remove to-change entry))]
-                     [dummy0 (vector-set! res index new-entry)])
+(define (fit-children state check-list oneE-list eq-map index)
+  (cond
+    ((null? oneE-list) eq-map) ; all transitions found
+    ((null? check-list) (error "fit-children: logic error: check-list and oneE-list different sizes?"))
+    ((null? (car check-list)) 
+      ;didn't find a match, add to unsat and fail
+      (cons-to-hash unsat state index) 
+      #f)
+    (else
+        ; test the first element in the first slot
+        (let* ([next-state (todo->next-state (caar check-list))]
+               [next-index (vector-ref (car oneE-list) 3)]
+               [res (try-fit next-state next-index eq-map)])
+          (if res 
+              ; the next state works... now add the link between its parent and it
+            (let* ([entry (vector-ref res index)]
+                   [to-change (if (assoc state entry) (assoc state entry) 
+                                            (error "fit-children: logic error: original state entry not found"))]
+                   [new-entry-element (list state 
+                                    (cons (list (caar check-list) next-index) (cadr to-change)))]
+                   [new-entry (cons new-entry-element (remove to-change entry))]
+                   [dummy0 (vector-set! res index new-entry)])
 
-              ; continue the call
-              (fit-children state (cdr check-list) (cdr oneE-list) res index))
+            ; continue the call
+            (fit-children state (cdr check-list) (cdr oneE-list) res index))
 
-              ; if failed, recurse on this sublist of the check-list
-              (fit-children state (cons (cdar check-list) (cdr check-list)) oneE-list eq-map index)))))))
+            ; if failed, recurse on this sublist of the check-list
+            (fit-children state (cons (cdar check-list) (cdr check-list)) oneE-list eq-map index))))))
 
 ; ================================== solution visualization ===================================== ;
 
