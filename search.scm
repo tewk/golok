@@ -123,11 +123,15 @@
 
   ; filter returns true only for systems states which may contain a proc-type process
   ; in its initial state
-  (define (start-aut-filter a)
-    (for/or ([x a]) (= start-aut (mprocess-state x))))
+  (define (start-aut-filter lst)
+    (for/or ([x lst]) (= start-aut (mprocess-state x))))
 
   (define-values (stepper ss lookup-table topo-hash) (init-stepper prot topo))
-
+#|
+  (pretty-print ss)
+  (pretty-print topo-hash)
+  (pretty-print lookup-table)
+|#
   ; save the ids of all parameterized system types 
   (define prot-process-names (protocol-process-names prot))
   (set! npp-ids (for/list ([x npp]) (item-index x prot-process-names)))

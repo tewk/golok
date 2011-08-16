@@ -98,21 +98,26 @@
 
 ;; global function
 (define (init-stepper prot topo-obj [verbose #f])
-  (define lookup-table (create-lookup-table (protocol-ba prot)))
+  (define lookup-table (create-lookup-table (protocol-behavior-automata prot)))
   (define-values (initial-auts topo-raw) (instantiate-protocol prot topo-obj))
   (define-values (topo start-state) (topo-description&initial-auts->topo-hash&start topo-raw initial-auts lookup-table))
-  (define (f state [proc-mask (list)] [to-todos? #f])
+  (define (stepper state [proc-mask (list)] [to-todos? #f])
     (define todos (state->todos state topo lookup-table proc-mask))
     (if to-todos? 
         todos
         (map todo->next-state todos))) 
-  (values f start-state lookup-table topo))
+#|
+  (displayln "=====================")
+  (pretty-print start-state)
+  (pretty-print topo)
+|#
+  (values stepper start-state lookup-table topo))
 
 ;;;;;;;;;;;;;;;;;;;
 ;;;; global function to create a model based on an initial state, full list of automata, and topo
 ;;;;;;;;;;;;;;;;;;;
 (define (build-sysNmodel-builder prot) 
-  (define lookup-table (create-lookup-table (protocol-ba prot)))
+  (define lookup-table (create-lookup-table (protocol-behavior-automata prot)))
   (lambda (topo-obj [verbose #f])
     (define-values (initial-auts topo-raw) (instantiate-protocol prot topo-obj))
     (define-values (topo start-state) (topo-description&initial-auts->topo-hash&start topo-raw initial-auts lookup-table))
@@ -124,9 +129,9 @@
 ;returns a model builder (which returns compact representations of 1e
 ; and the trans-table
 (define (build-oneEmodel-builder prot)
-  (define tt (create-lookup-table (protocol-ba prot) #t))
+  (define tt (create-lookup-table (protocol-behavior-automata prot) #t))
   (define (f proc-type initial-aut id-mask [verbose #f])
-    (define all-aut (protocol-ba prot))
+    (define all-aut (protocol-behavior-automata prot))
     ; set the global eps-id from the lookup table
     (set! eps-id (msg->msg-id eps tt))
     ;  [initial-aut

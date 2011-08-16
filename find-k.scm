@@ -134,7 +134,7 @@
   ; k is current system instance
   (define k (protocol-kernel prot))
 
-  (define eps-auts (for/filter ([z (protocol-ba prot)]) (equal? eps (automaton-in-msg z))))
+  (define eps-auts (for/filter ([z (protocol-behavior-automata prot)]) (equal? eps (automaton-in-msg z))))
   (define starts
     (cond
       [process-type
@@ -234,13 +234,17 @@
       (find-solution-rec k id prot names (modulo (add1 cur_ch) size) best-trace made-a-change next-id-to-inc)]
     [else 
       (define new-k (rule 'apply k))
-      (define-values (soln data) (search prot new-k (list-ref names id) dfs start-aut
-                                                        #:pruning pruning
-                                                        #:npp npp 
-                                                        #:ring ring
-                                                        #:star star
-                                                        #:start start-depth
-                                                        #:stop stop-depth))
+      (define-values (soln data) (search prot
+                                         new-k
+                                         (list-ref names id)
+                                         dfs
+                                         start-aut
+                                         #:pruning pruning
+                                         #:npp npp 
+                                         #:ring ring
+                                         #:star star
+                                         #:start start-depth
+                                         #:stop stop-depth))
       (cond 
         ; new configuration simulates
         [soln

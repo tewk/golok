@@ -19,7 +19,7 @@
   protocol-process-names
 
   ;; (procotol?) -> (list-of automaton?) 
-  protocol-ba
+  protocol-behavior-automata
 
   ;; (procotol?) -> (list-of process?)
   protocol-processes
@@ -223,13 +223,31 @@
        (out-msg symbol?)))
     
     ;;;;;;;;;
+    ;;;#(struct:protocol
+    ;;;  (node)
+    ;;;  (#(struct:process
+    ;;;     node
+    ;;;     (#(struct:automaton node RCV Idle token Ncs choose)
+    ;;;      #(struct:automaton node SND Start epsilon Idle token)
+    ;;;      #(struct:automaton node PASS Ncs choose Idle token)
+    ;;;      #(struct:automaton node ENTER Ncs choose Cs in)
+    ;;;      #(struct:automaton node LEAVE Cs in Idle token))
+    ;;;     #(struct:automaton node RCV Idle token Ncs choose)))
+    ;;;  (#<procedure:...golok/parser.scm:364:12>)
+    ;;;  ((node token lpeer) (node in self) (node choose self))
+    ;;;  ((node 0 #(struct:automaton node SND Start epsilon Idle token)))
+    ;;;  #(struct:topology
+    ;;;    "examples/dme.amf"
+    ;;;    ((node 2))
+    ;;;    ((node 0 -- node 1) (node 1 -- node 0))))
+
     (define-struct protocol (process-names processes addition-rules topo-msgs start-conf kernel) #:transparent)
     
     (define-struct process (name auts default-aut) #:transparent)
-    
-    (define protocol-ba
-      (lambda (prot)
-        (list-of-lists->list (map process-auts (protocol-processes prot)))))
+   
+    ;; prot -> basic automata
+    (define (protocol-behavior-automata prot)
+        (list-of-lists->list (map process-auts (protocol-processes prot))))
     
     ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
     ;;
