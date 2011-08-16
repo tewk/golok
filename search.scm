@@ -60,10 +60,6 @@
 ;; (state? hash-map?) -> (state?)
 (define state->representative (void))
 
-;; hash-map to save the number of explored states for the sake of writing the 
-;; results in the paper
-(define states-explored 0) 
-
 ;; filter for checking a state for simulation (this is a heuristic)
 ;; TODO: implement this (since we changed to state-based instead of 
 ;;            automaton-based representation, this is harder to do)
@@ -222,8 +218,9 @@
   ; logic starts here
   
   ; result is either a simulating subset model or false
+  (define states-explored (make-hash))
   (let ([result (if dfs (search-dfs start-state) 
-                        (search-bfs 0 (if dump dump #f)))])
+                        (search-bfs 0 states-explored dump))])
     (cond 
       ((and (not (equal? #f dump)) (model? result))
         (begin
@@ -244,7 +241,7 @@
   (cond
     [(hash-has-key? store state) #f]
     [else
-      (define ans (search-node state))
+      (define ans (search-node state (make-hash)))
       ; if we found an answer, just return it
       ; otherwise, check children
       (or ans
@@ -263,11 +260,10 @@
                (ormap (lambda (x) (search-dfs x store)) possible-starts)])))]))
         
 ; search state space with BFS
-(define (search-bfs depth [dump #f])
+(define (search-bfs depth states-explored [dump #f])
   ; reset the global space
   ;; hash-map of states already checked for simulation  (keys: system-states, values: #t)
   (define state-space (make-hash))
-  (set! states-explored (make-hash))
 
   (define (search-bfs-rec depth fringe dump)
     (define (get-fringe depth state-space fringe)
@@ -320,7 +316,7 @@
             #f)]
       [else
         ; check if some fringe node is the start of 1e simulating chunk
-        (define sim (ormap search-node gr))
+        (define sim (for/or ([x gr]) (search-node x states-explored)))
         (cond 
           ; if we found a solution, return it
           [sim sim]
@@ -358,7 +354,112 @@
 ;#((#(struct:mprocess 6 ())) (#(2 4 7 3)))
 ;#((#(struct:mprocess 8 ())) (#(4 1 9 1)))
 ;#((#(struct:mprocess 4 ())) (#(2 1 5 1))))
-(define (search-node state)
+(define (search-node state states-explored)
+  ; try to fit state as 1e position index
+  (define (try-fit state index eq-map)
+    ; update max-trace
+    ;
+    ; max-trace is the longest (incomplete) "trace" of the 1e model
+    (define (update-trace eq-map)
+      (define ln (for/fold ([s 0]) ([x (in-vector eq-map)]) (+ s (length x))))
+      (when (> ln max-trace) (set! max-trace ln)))
+
+    (cond
+      ; if sim-filter rejects, remove
+      ;((not ((vector-ref sim-filter index) state)) #f)
+      ; if already in the map, done
+      [(assoc state (vector-ref eq-map index))  eq-map]
+      ; if in unsatisfiability map, fail
+      [(member index (hash-ref! unsat state (list))) #f]
+      ; otherwise, expan dnd-toiall possible branches
+      [else
+        ; condense: (list-of todo, oneE transition index to match) -> #f | (list-of (list-of todo))
+        (define (condense todos index)
+          (define possible-list
+            (for/list ([x (vector-ref (vector-ref oneE index) 1)])
+              (define x0 (vector-ref x 0))
+              (define x1 (vector-ref x 1))
+              (for/filter ([y todos])
+                (and 
+                  (= x0 (todo-msg y))
+                  (= x1 (todo-msg2 y))))))
+              
+          ; if there are any empties (1e transitions which are not simulated), fail
+          (if (member (list) possible-list) 
+              #f 
+              possible-list))
+        ; first collect all states reachable via tau transitions
+        (define starts (explode state pp-ids))
+        ; then collect all the proc-type transitions possible from the start set
+        (define possibles 
+                    ;(list-of-lists->list (map (lambda (x) (expand x other-mask-ids #t)) starts))]
+                    (list-of-lists->list (map (lambda (x) (expand x npp-ids #t)) starts)))
+
+        ; finally sort the transitions according to the needed 1e transitions
+        (define check-list (condense possibles index))
+
+        ; if condensing found unsimulated transitions (returned #f), update trace and leave
+        (cond
+          [(not check-list)
+            (update-trace eq-map) 
+            ;add to unsatisfiability map
+            (for-each (lambda (x) (cons-to-hash unsat x index)) starts)
+            ; and fail
+            #f]
+          ; otherwise, lets assume this state simulates
+          [else
+            (define new-em (make-vector (vector-length eq-map)))
+            ;(display-ln "Check list has " check-list "\n") 
+            (map (lambda(x) (hash-set! states-explored x  #f)) check-list)
+            ;(display-ln "The number of children to explore are" (length check-list) "\n")
+            ; first make a copy of the equivalence map
+            (vector-copy! new-em 0 eq-map)
+
+            ; current is a list of entries of (state (list-of (todo index)))
+            (define current (vector-ref new-em index))
+            (define new-entry (list state (list)))
+            ; add this state to the equivalence map
+            (vector-set! new-em index (cons new-entry current))
+
+            ; make sure all transitions are simulated recursively
+            (fit-children state check-list (vector-ref (vector-ref oneE index) 1) new-em index)])]))
+
+  ; ensure "state"'s children (in check-list) recursively complete the oneE-list of transitions
+  ;
+  ; eq-map is the current equivalence map, and index is the index of the 1e model to simulate
+  ;
+  ; oneE-list is list of (vector in-msg-id out-msg-id ignore-id next-index)
+  (define (fit-children state check-list oneE-list eq-map index)
+    (cond
+      ((null? oneE-list) eq-map) ; all transitions found
+      ((null? check-list) (error "fit-children: logic error: check-list and oneE-list different sizes?"))
+      ((null? (car check-list)) 
+        ;didn't find a match, add to unsat and fail
+        (cons-to-hash unsat state index) 
+        #f)
+      (else
+          ; test the first element in the first slot
+          (let* ([next-state (todo->next-state (caar check-list))]
+                 [next-index (vector-ref (car oneE-list) 3)]
+                 [res (try-fit next-state next-index eq-map)])
+            (if res 
+                ; the next state works... now add the link between its parent and it
+              (let* ([entry (vector-ref res index)]
+                     [to-change (if (assoc state entry) (assoc state entry) 
+                                              (error "fit-children: logic error: original state entry not found"))]
+                     [new-entry-element (list state 
+                                      (cons (list (caar check-list) next-index) (cadr to-change)))]
+                     [new-entry (cons new-entry-element (remove to-change entry))]
+                     [dummy0 (vector-set! res index new-entry)])
+
+              ; continue the call
+              (fit-children state (cdr check-list) (cdr oneE-list) res index))
+
+              ; if failed, recurse on this sublist of the check-list
+              (fit-children state (cons (cdar check-list) (cdr check-list)) oneE-list eq-map index))))))
+
+
+
   ;(pretty-print oneE)
   ;(printf "STATE: ~a\n" state)
   (cond 
@@ -368,74 +469,9 @@
       (define eq-map (make-vector (vector-length oneE) (list)))
       (try-fit state 0 eq-map)]))
 
-; try to fit state as 1e position index
-(define (try-fit state index eq-map)
-  ; update max-trace
-  ;
-  ; max-trace is the longest (incomplete) "trace" of the 1e model
-  (define (update-trace eq-map)
-    (define ln (for/fold ([s 0]) ([x (in-vector eq-map)]) (+ s (length x))))
-    (when (> ln max-trace) (set! max-trace ln)))
 
-  (cond
-    ; if sim-filter rejects, remove
-    ;((not ((vector-ref sim-filter index) state)) #f)
-    ; if already in the map, done
-    [(assoc state (vector-ref eq-map index))  eq-map]
-    ; if in unsatisfiability map, fail
-    [(member index (hash-ref! unsat state (list))) #f]
-    ; otherwise, expan dnd-toiall possible branches
-    [else
-      ; condense: (list-of todo, oneE transition index to match) -> #f | (list-of (list-of todo))
-      (define (condense todos index)
-        (define possible-list
-          (for/list ([x (vector-ref (vector-ref oneE index) 1)])
-            (define x0 (vector-ref x 0))
-            (define x1 (vector-ref x 1))
-            (for/filter ([y todos])
-              (and 
-                (= x0 (todo-msg y))
-                (= x1 (todo-msg2 y))))))
-            
-        ; if there are any empties (1e transitions which are not simulated), fail
-        (if (member (list) possible-list) 
-            #f 
-            possible-list))
-      ; first collect all states reachable via tau transitions
-      (define starts (explode state pp-ids))
-      ; then collect all the proc-type transitions possible from the start set
-      (define possibles 
-                  ;(list-of-lists->list (map (lambda (x) (expand x other-mask-ids #t)) starts))]
-                  (list-of-lists->list (map (lambda (x) (expand x npp-ids #t)) starts)))
 
-      ; finally sort the transitions according to the needed 1e transitions
-      (define check-list (condense possibles index))
 
-      ; if condensing found unsimulated transitions (returned #f), update trace and leave
-      (cond
-        [(not check-list)
-          (update-trace eq-map) 
-          ;add to unsatisfiability map
-          (for-each (lambda (x) (cons-to-hash unsat x index)) starts)
-          ; and fail
-          #f]
-        ; otherwise, lets assume this state simulates
-        [else
-          (define new-em (make-vector (vector-length eq-map)))
-	  ;(display-ln "Check list has " check-list "\n") 
-	  (map (lambda(x) (hash-set! states-explored x  #f)) check-list)
-	  ;(display-ln "The number of children to explore are" (length check-list) "\n")
-          ; first make a copy of the equivalence map
-          (vector-copy! new-em 0 eq-map)
-
-          ; current is a list of entries of (state (list-of (todo index)))
-          (define current (vector-ref new-em index))
-          (define new-entry (list state (list)))
-          ; add this state to the equivalence map
-          (vector-set! new-em index (cons new-entry current))
-
-          ; make sure all transitions are simulated recursively
-          (fit-children state check-list (vector-ref (vector-ref oneE index) 1) new-em index)])]))
 
 
  ; return a list of *all* states reachable without using a transition in proc-mask
@@ -458,40 +494,6 @@
     (if (= 0 (hash-count new-fringe)) 
         (hash-map collection (lambda (x y) x))
         (explode-rec collection new-fringe proc-mask))))
-
-; ensure "state"'s children (in check-list) recursively complete the oneE-list of transitions
-;
-; eq-map is the current equivalence map, and index is the index of the 1e model to simulate
-;
-; oneE-list is list of (vector in-msg-id out-msg-id ignore-id next-index)
-(define (fit-children state check-list oneE-list eq-map index)
-  (cond
-    ((null? oneE-list) eq-map) ; all transitions found
-    ((null? check-list) (error "fit-children: logic error: check-list and oneE-list different sizes?"))
-    ((null? (car check-list)) 
-      ;didn't find a match, add to unsat and fail
-      (cons-to-hash unsat state index) 
-      #f)
-    (else
-        ; test the first element in the first slot
-        (let* ([next-state (todo->next-state (caar check-list))]
-               [next-index (vector-ref (car oneE-list) 3)]
-               [res (try-fit next-state next-index eq-map)])
-          (if res 
-              ; the next state works... now add the link between its parent and it
-            (let* ([entry (vector-ref res index)]
-                   [to-change (if (assoc state entry) (assoc state entry) 
-                                            (error "fit-children: logic error: original state entry not found"))]
-                   [new-entry-element (list state 
-                                    (cons (list (caar check-list) next-index) (cadr to-change)))]
-                   [new-entry (cons new-entry-element (remove to-change entry))]
-                   [dummy0 (vector-set! res index new-entry)])
-
-            ; continue the call
-            (fit-children state (cdr check-list) (cdr oneE-list) res index))
-
-            ; if failed, recurse on this sublist of the check-list
-            (fit-children state (cons (cdar check-list) (cdr check-list)) oneE-list eq-map index))))))
 
 ; ================================== solution visualization ===================================== ;
 
