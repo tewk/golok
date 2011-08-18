@@ -54,13 +54,6 @@
 ; filter for branch pruning
 (define start-state-filter (void))
 
-; ids of non-parameterized process names as integers
-(define npp-ids (list))
-
-; ids of parameterized process names as integers
-(define pp-ids (list))
-
-
 (define (todo->new-todo td)
   (define s1 (state->representative (todo-state td)))
   (define s2 (state->representative (todo->next-state td)))
@@ -102,8 +95,10 @@
 |#
   ; save the ids of all parameterized system types 
   (define prot-process-names (protocol-process-names prot))
-  (set! npp-ids (for/list ([x npp]) (item-index x prot-process-names)))
-  (set! pp-ids (for/filter ([x (in-range (length prot-process-names))]) (not (member x npp-ids))))
+  ; ids of non-parameterized process names as integers
+  (define npp-ids (for/list ([x npp]) (item-index x prot-process-names)))
+  ; ids of parameterized process names as integers
+  (define pp-ids (for/filter ([x (in-range (length prot-process-names))]) (not (member x npp-ids))))
 
   ; TODO: generalize these reductions (and maybe figure them out from the topology)
   (cond 
@@ -179,8 +174,8 @@
   ; result is either a simulating subset model or false
   (define states-explored (make-hash))
   (define state-space (make-hash))
-  (let ([result (if dfs (search-dfs start-state stepper oneE-model) 
-                        (search-bfs start-state 0 states-explored stepper oneE-model dump state-space))])
+  (let ([result (if dfs (search-dfs start-state stepper oneE-model pp-ids npp-ids) 
+                        (search-bfs start-state 0 states-explored stepper oneE-model dump state-space pp-ids npp-ids))])
     (cond 
       [(and (not (equal? #f dump)) (model? result))
         (display-ln "dumping (did NOT really find simulation)")
@@ -189,20 +184,20 @@
           (begin
           ;(display-ln "This is simulating done" (vector-length result) "\n")
           (display-ln "The number of explored states is " (hash-count states-explored) "\n")
-          (values #t (search->model result lookup-table topo-hash)))]
+          (values #t (search->model result lookup-table topo-hash pp-ids)))]
         ; otherwise just return failure
         [else
           (when (and (not dfs) dump)
             (make-model (hash->model state-space lookup-table topo-hash start-state state->representative) lookup-table))
           (values #f max-trace)])))
 
-(define (search-dfs state stepper oneE-model [store (make-hash)] [unsat (make-hash)])
+(define (search-dfs state stepper oneE-model pp-ids npp-ids [store (make-hash)] [unsat (make-hash)])
   (when (zero? (modulo (hash-count store) 100)) 
     (display-ln "\t" (hash-count store) " states checked and " (hash-count unsat) " in unsat" ))
   (cond
     [(hash-has-key? store state) #f]
     [else
-      (define ans (search-node state (make-hash) stepper unsat oneE-model))
+      (define ans (search-node state (make-hash) stepper unsat oneE-model pp-ids npp-ids))
       ; if we found an answer, just return it
       ; otherwise, check children
       (cond
@@ -225,6 +220,8 @@
                     oneE-model
                     dump
                     state-space
+                    pp-ids
+                    npp-ids
                     [fringe (make-hash)]
                     [unsat (make-hash)])
     (define (get-fringe depth state-space fringe)
@@ -273,7 +270,7 @@
         ; check if some fringe node is the start of 1e simulating chunk
         (define sim (for/or ([x (in-hash-keys new-fringe)]) 
                             ;(printf "SN ~a\n" x)
-                            (search-node x (make-hash) stepper (make-hash) oneE-model)))
+                            (search-node x (make-hash) stepper (make-hash) oneE-model pp-ids npp-ids)))
         (cond 
           ; if we found a solution, return it
           [sim sim]
@@ -284,7 +281,7 @@
           ; otherwise, keep going
           [else
             (search-bfs start-state (add1 depth) states-explored stepper oneE-model
-                        (if dump (sub1 dump) #f) state-space new-fringe unsat)])]))
+                        (if dump (sub1 dump) #f) state-space pp-ids npp-ids new-fringe unsat)])]))
 
 
 ;;;;;;;;;;;;;;;;; end search ;;;;;;;;;;;;;;;;;;
@@ -311,7 +308,7 @@
 ;#((#(struct:mprocess 6 ())) (#(2 4 7 3)))
 ;#((#(struct:mprocess 8 ())) (#(4 1 9 1)))
 ;#((#(struct:mprocess 4 ())) (#(2 1 5 1))))
-(define (search-node state states-explored stepper unsat oneE-model)
+(define (search-node state states-explored stepper unsat oneE-model pp-ids npp-ids)
   ; try to fit state as 1e position index
   (define (try-fit state index eq-map)
     ; update max-trace
@@ -451,13 +448,13 @@
 ; ================================== solution visualization ===================================== ;
 
 ; converts search results (for proc-type)  to standard model output
-(define (search->model results lt topo-ht)
+(define (search->model results lt topo-ht pp-ids)
   (define db (make-hash))
   ; puts all states mentioned in the search result into the db
   (define (add-all-states res)
     (for ([x (in-vector res)])
       (for ([y x])
-        (process-entry! y db))))
+        (process-entry! y db pp-ids))))
 
   (add-all-states results)
   ; pass the first state of simulation
@@ -478,7 +475,7 @@
 ; (so if start-state is not equal to todo-state, there is a tau link between them,
 ; and the transition from todo-state to todo->next-state is of this process type)
 ;
-(define (process-entry! entry db)
+(define (process-entry! entry db pp-ids)
   (define start-state (car entry))
   ; ensure start-state is in the db
   (define ss-id (get-id start-state db))
@@ -491,7 +488,7 @@
     ; if start-state does not equal the initial state of the proc-type transition,
     ; then at least one tau transition needed to happen, first
     (when (not (equal? start-state (todo-state td)))
-        (connect-taus! start-state (todo-state td) db))
+        (connect-taus! start-state (todo-state td) db pp-ids))
      (add-td-to-db! td db)))
 
 (define (add-td-to-db! td db)
@@ -517,7 +514,7 @@
 
 ;; adds all intermediate states from start-state to end-state 
 ;; (using tau transitions)
-(define (connect-taus! start-state end-state db) 
+(define (connect-taus! start-state end-state db pp-ids) 
   ;We want to check if, after going through all tau-transitions from start-state to children
   ;if we are going to reach the end-state
   ; dummy check
@@ -530,13 +527,13 @@
       (define possibles (remove-duplicates (expand start-state pp-ids #t)))
       ; since there *is* a path to the end-state, this ormap always gives a non #f result
       ; if it *does* return false, there is an error in our search algorithm
-      (or (for/or ([x possibles]) (connect-taus-rec x end-db db (make-hash)))
+      (or (for/or ([x possibles]) (connect-taus-rec x end-db db (make-hash) pp-ids))
           (error "there is a bug in search!"))]))
 
 ; returns a list or #f: #f on failure or (list todo final-state)
 ;     the todo which started this level and the final edge state
 ; (we need to return the first state of final-todo)
-(define (connect-taus-rec init-td final-db db visited)
+(define (connect-taus-rec init-td final-db db visited pp-ids)
   (define start-state (todo-state init-td))
   (define end-state (todo->next-state init-td))
   (when (>= debug 4)  (display-ln "ctr call:\n\tss: " start-state "\n\tes: " end-state"\n\n\n"))
@@ -562,7 +559,7 @@
                               #t)
                             (begin
                               (hash-set! visited end-state #f)
-                              (connect-taus-rec x final-db db visited)))))
+                              (connect-taus-rec x final-db db visited pp-ids)))))
 
           ; if one of our children found the solution, add its transition and return
           (if res
