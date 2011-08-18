@@ -40,55 +40,9 @@
   ;;
   ;; search: (protocol topology proc-type ...) -> (values #t vector-model) | (values #f max-trace-integer)
   (require "search.scm")
-(require "macros.rkt")
+(require "macros.rkt"
+         "globals.rkt")
 
-;;;;;;;;;;;;;;;;;;;;;;;;;;
-;;;; gobal variables ;;;;;
-;;;;;;;;;;;;;;;;;;;;;;;;;;
-
-;;; command line options ;;;
-
-;(initialized by init-clo)
-
-(define debug 0) ; info level
-(define max-secs #f) ; model size to halt after
-(define dump-1E #f) ;; write out all 1E models
-(define dump-sys #f)
-(define output-directory #f)
-(define dfs #f)
-(define ring #f)
-(define star (list))
-(define start-depth #f)
-(define stop-depth #f)
-(define process-type #f)
-(define dump #f) ; dump depth
-(define npp (list))
-(define pruning #t)
-
-
-; list of non-paramterized process names
-
-;; TODO: figure out if there is any better way for 
-;;        passing arguments across modules
-;;        (while avoiding circular "requires")
-;;        because this is ugly as sin
-;;
-;; set globals passed via command line arguments
-(define (init-clo arg-list)
-  (set! debug            (list-ref arg-list 0))
-  (set! max-secs         (list-ref arg-list 1))
-  (set! dump-1E          (list-ref arg-list 2))
-  (set! dump-sys         (list-ref arg-list 3))
-  (set! output-directory (list-ref arg-list 4))
-  (set! dfs              (list-ref arg-list 5))
-  (set! ring             (list-ref arg-list 6))
-  (set! start-depth      (list-ref arg-list 7))
-  (set! stop-depth       (list-ref arg-list 8))
-  (set! process-type     (list-ref arg-list 9))
-  (set! star             (list-ref arg-list 10))
-  (set! dump             (list-ref arg-list 11))
-  (set! npp              (list-ref arg-list 12))
-  (set! pruning          (list-ref arg-list 13)))
 
 ;;; internals ;;;
 
@@ -104,7 +58,7 @@
  (define cl (path->complete-path (string->path filename)))
  (define-values (amf-dir amf-file dir?) (split-path cl))
 
- (unless output-directory (set! output-directory amf-dir))
+ (unless output-directory (set!-output-directory amf-dir))
  (define prot (parse-amf-file filename))
  ; base name for output files
  (define base-name (parse-filename filename))
@@ -123,12 +77,11 @@
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
       
-(define (find-k filename arg-list)
+(define (find-k filename)
   (define bar "---------------------------\n")
 
-  (init-clo arg-list)
   (when (>= debug 4)
-      (display-ln bar "find-k call\n\tfilename: " filename "\n\targ-list: " arg-list))
+      (display-ln bar "find-k call\n\tfilename: " filename "\n"))
 
   (define-values (prot base-name) (init-internals filename))
   ; k is current system instance
