@@ -58,7 +58,8 @@
 
 (require "datatypes.scm"
          "lookup-table.scm"
-         "parser.scm")
+         "parser.scm"
+         "macros.rkt")
 
 
 ;; !!! LOCAL MAGIC VARIABLES !!!
@@ -510,19 +511,13 @@
 
 ;; collect all todos for a single sender and message
 ;; by trying every possible transition permitted by the topo
-(define sender&msg->todos
-  (lambda (msg id state lt topo proc-mask)
-    ;       initially try to send the message to everyone
-    (let* ([raw_targets (build-list (length state) values)]
-           ; remove targets in proc-mask
-           [targets (filter (lambda (x)
-                              (not (member (state-id->proc-id (mprocess-state (list-ref state x))) proc-mask))) raw_targets)])
-      (let ([result 
-             (list-of-lists->list
-              (map 
-               (lambda (x) 
-                 (sender&msg&receiver->todos msg id state x topo lt)) targets))])
-        result))))
+(define (sender&msg->todos msg id state lt topo proc-mask)
+  (list-of-lists->list
+    (for/filter-map ([x state]
+                     [recv-id (in-naturals)])
+      (if (member (state-id->proc-id (mprocess-state x)) proc-mask)
+        #f
+        (sender&msg&receiver->todos msg id state recv-id topo lt)))))
 
 ;;
 ;; sender&msg&receiver->todos: (msg id oneEmodel) -> (list-of todo?)
@@ -535,21 +530,15 @@
 ;; recv-id = id of receiving automaton
 ;;
 ;; output: ( a list of <a-todo>)
-(define sender&msg&receiver->todos
-  (lambda (msg send-id state recv-id topo lt)
-    (let* ([proc (list-ref state recv-id)]
-           [st (mprocess-state proc)]
-           [buff (mprocess-buff proc)])
-      (make-todos state msg send-id recv-id 
-                  (if (number? topo)
-                      ; if oneE, give all possible transitions
-                      (get-trans (mprocess-state (list-ref state recv-id)) msg lt)
+(define (sender&msg&receiver->todos msg send-id state recv-id topo lt)
+  (make-todos state msg send-id recv-id 
+    (if (number? topo)
+        ; if oneE, give all possible transitions
+        (get-trans (mprocess-state (list-ref state recv-id)) msg lt)
 
-                      (hash-ref! topo (vector recv-id (mprocess-state (list-ref state recv-id)) msg send-id) 
-                          (list)))))))
+        (hash-ref! topo (vector recv-id (mprocess-state (list-ref state recv-id)) msg send-id) (list)))))
 
-(define make-todos
-  (lambda (state msg send-id recv-id final-recv-pairs)
+(define (make-todos state msg send-id recv-id final-recv-pairs)
     (if (null? final-recv-pairs) '()
         (let* ([tp (car final-recv-pairs)]
                [new-state (vector-ref tp 0)]
@@ -557,7 +546,7 @@
           (cons 
            (make-todo state msg send-id recv-id new-state out-msg 
                       (make-next-state state msg send-id recv-id out-msg new-state)) 
-           (make-todos state msg send-id recv-id (cdr final-recv-pairs)))))))
+           (make-todos state msg send-id recv-id (cdr final-recv-pairs))))))
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;; end todo generation ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 

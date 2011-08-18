@@ -29,6 +29,9 @@
 ;; 1E model as labeled-transition directed graph
 (define oneE (void))
 
+;; maximum trace
+(define max-trace 0)
+
 
 
 ;; the expand function 
@@ -36,24 +39,7 @@
 ;; returns all possible new states
 ;; (state) -> (list-of state)
 (define expand (void))
-(define expand-to (void))
 
-;; maximum trace
-(define max-trace 0)
-
-;; process-type we are checking
-(define proc-type (void))
-(define proc-type-id (void))
-
-;; default start automaton for process we are checking
-(define start-aut (void))
-
-;; mask of all other processes
-(define other-mask (void))
-(define other-mask-ids (void))
-
-;; global unsatisfiability table (specific to search calls)
-(define unsat (void))
 
 ;; function which maps a system state to a specific representative (~ is partial order reduction)
 ;;
@@ -64,12 +50,6 @@
 ;; TODO: implement this (since we changed to state-based instead of 
 ;;            automaton-based representation, this is harder to do)
 (define sim-filter (void))
-
-;; TODO: use this
-(define start-depth #f)
-
-;; TODO: use this
-(define stop-depth #f)
 
 ; lookup table
 (define lt #f)
@@ -86,18 +66,24 @@
 ; filter for branch pruning
 (define start-state-filter (void))
 
-; print optimizations debugging output
-(define opt-dbg 0)
-
 ; ids of non-parameterized process names as integers
 (define npp-ids (list))
 
 ; ids of parameterized process names as integers
 (define pp-ids (list))
 
-;; start state
-(define start-state (void))
-;;;;;;;;;;;;;;;;;;;;
+
+(define (todo->new-todo td)
+  (define s1 (state->representative (todo-state td)))
+  (define s2 (state->representative (todo->next-state td)))
+  (make-todo s1 (todo-msg td)
+                (todo-send-id td)
+                (todo-recv-id td)
+                (todo-cons-state td)
+                (todo-msg2 td)
+                s2))
+
+(define-struct search-helper-state (start-state-filter npp-ids pp-ids) #:prefab)
 
 ;;; search function and small helper functions ;;;
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
@@ -109,7 +95,7 @@
 ; star - (list-of process-types of which system states are equivalent when swapped around)
 ; start - integer-depth | #f
 ; stop - integer-depth | #f
-(define (search prot topo pt dfs oneE-start-aut
+(define (search prot topo proc-type dfs oneE-start-aut
                             #:pruning [pr #t]
                             #:npp [npp (list)]
                             #:dump [dump #f] 
@@ -120,9 +106,6 @@
 
   ; filter returns true only for systems states which may contain a proc-type process
   ; in its initial state
-  (define (start-aut-filter lst)
-    (for/or ([x lst]) (= start-aut (mprocess-state x))))
-
   (define-values (stepper ss lookup-table topo-hash) (init-stepper prot topo))
 #|
   (pretty-print ss)
@@ -134,9 +117,6 @@
   (set! npp-ids (for/list ([x npp]) (item-index x prot-process-names)))
   (set! pp-ids (for/filter ([x (in-range (length prot-process-names))]) (not (member x npp-ids))))
 
-  ; enable/disable pruning
-  (set! start-state-filter (if pr start-aut-filter (lambda (x) #t)))
- 
   ; TODO: generalize these reductions (and maybe figure them out from the topology)
   (cond 
     ((and r (not (null? s)))
@@ -157,19 +137,16 @@
 
 
   ; set a bunch of global (to this module) variables
-  (set! start-state (state->representative ss))
+  (define start-state (state->representative ss))
 
   ; XXX: cleanup
   (set! lt lookup-table)
   (set! topo-ht topo-hash)
    
-  ; TODO: use these
-  (set! start-depth start-d)
-  (set! stop-depth stop-d)
 
   ; TODO: set up branch pruning
 
-  ;;; add wrapper around the expand function 
+  ;; add wrapper around the expand function 
   ;; which handles state reduction
   (define (expand-toi state to-list [proc-mask (list)] [to-todos? #f])
     (if to-todos?
@@ -191,36 +168,34 @@
 
   (set! expand 
          (lambda (state [proc-mask (list)] [to-todos? #f])
-           (reverse (expand-to state null proc-mask to-todos?))))
-  (set! expand-to expand-toi)
+           (reverse (expand-toi state null proc-mask to-todos?))))
 
-  (set! proc-type pt)
-  (set! start-aut (state->state-id (vector proc-type (automaton-state1 (process-default-aut (car 
+  (define start-aut (state->state-id (vector proc-type (automaton-state1 (process-default-aut (car 
                         (filter (lambda (x) (equal? proc-type (process-name x)))
                                           (protocol-processes prot)))))) lt))
+  (define (start-aut-filter lst)
+    (for/or ([x lst]) (= start-aut (mprocess-state x))))
+
+  ; enable/disable pruning
+  (set! start-state-filter (if pr start-aut-filter (lambda (x) #t)))
+ 
   
-  (set! other-mask (remove proc-type (protocol-process-names prot)))
-
-  (set! proc-type-id (proc->proc-id proc-type lt))
-  (set! other-mask-ids (map (lambda (x) (proc->proc-id x lt)) other-mask))
-
   (let-values ([(fresh-tt builder) (build-oneEmodel-builder prot)])
+;    (pretty-print fresh-tt)
     (set! oneE (model-mdl (builder proc-type oneE-start-aut npp-ids))))
+;  (pretty-print lookup-table)
+;  (pretty-print oneE)
   
   ; debugging messages
   (when (>= debug 2) (display-ln "checking " (topology->string topo) " for simulation of " proc-type))
   (when (and dump dfs) (display-ln "WARNING: using dfs, so ignoring #:dump option " dump))
 
-   ;; create a new unsatisfiability table
-  (set! unsat (make-hash))
-
-
   ; logic starts here
   
   ; result is either a simulating subset model or false
   (define states-explored (make-hash))
-  (let ([result (if dfs (search-dfs start-state) 
-                        (search-bfs 0 states-explored stepper dump))])
+  (let ([result (if dfs (search-dfs start-state stepper) 
+                        (search-bfs start-state 0 states-explored stepper dump))])
     (cond 
       ((and (not (equal? #f dump)) (model? result))
         (begin
@@ -235,35 +210,36 @@
         (#t
           (values #f max-trace)))))
 
-(define (search-dfs state [store (make-hash)])
+(define (search-dfs state stepper [store (make-hash)] [unsat (make-hash)])
   (when (zero? (modulo (hash-count store) 100)) 
     (display-ln "\t" (hash-count store) " states checked and " (hash-count unsat) " in unsat" ))
   (cond
     [(hash-has-key? store state) #f]
     [else
-      (define ans (search-node state (make-hash)))
+      (define ans (search-node state (make-hash) stepper unsat))
       ; if we found an answer, just return it
       ; otherwise, check children
-      (or ans
-          (let* ([new-states (filter (lambda (y) (not (hash-has-key? store y)))
-                          (remove-duplicates (expand state)))]
-                 ; remove all states that do not have a process of proc-type in the 
-                 ; initial state
-                 ; (because they cannot possibly simulate)
-                 [possible-starts (filter start-state-filter new-states)])
-            (hash-set! store state #t)
-            (cond
-              [(null? possible-starts) 
-               (display-ln "The hash has " (hash-count store) " state \n") 
-               #f]
-              [else
-               (ormap (lambda (x) (search-dfs x store)) possible-starts)])))]))
+      (cond
+        [ans ans]
+        [else
+          (for/or ([y (stepper state (list))])   
+            (define z (state->representative y))
+            (cond 
+              [(and (not (hash-has-key? store z))
+                         (start-state-filter z))
+                (hash-set! store state #t)
+                (search-dfs z stepper store unsat)]
+              [else #f]))])]))
         
 ; search state space with BFS
-(define (search-bfs depth states-explored stepper [dump #f] [state-space (make-hash)] [fringe (make-hash)])
-  ; reset the global space
-  ;; hash-map of states already checked for simulation  (keys: system-states, values: #t)
-;  (define (search-bfs-rec depth fringe dump)
+(define (search-bfs start-state 
+                    depth 
+                    states-explored 
+                    stepper 
+                    [dump #f] 
+                    [state-space (make-hash)] 
+                    [fringe (make-hash)]
+                    [unsat (make-hash)])
     (define (get-fringe depth state-space fringe)
       ; this is basically called once since the parameter of depth is "1" 
       ; and then the fringe is returned
@@ -279,10 +255,11 @@
             (define proc-mask (list))
             (for ([x (in-hash-keys fringe)])
               (for ([y (stepper x proc-mask)])   
-                (when (and (not (hash-has-key? state-space y))
-                           (start-state-filter y))
-                  (hash-set! new-fr y #t)
-                  (hash-set! state-space y #t))))
+                (define z (state->representative y))
+                (when (and (not (hash-has-key? state-space z))
+                           (start-state-filter z))
+                  (hash-set! new-fr z #t)
+                  (hash-set! state-space z #t))))
                    
             ;(display-ln "The count of state space is "(hash-count state-space) "\n")
             (get-fringe-rec (sub1 depth) state-space new-fr)]))
@@ -310,7 +287,9 @@
             #f)]
       [else
         ; check if some fringe node is the start of 1e simulating chunk
-        (define sim (for/or ([x (in-hash-keys new-fringe)]) (search-node x states-explored)))
+        (define sim (for/or ([x (in-hash-keys new-fringe)]) 
+                            ;(printf "SN ~a\n" x)
+                            (search-node x (make-hash) stepper (make-hash))))
         (cond 
           ; if we found a solution, return it
           [sim sim]
@@ -319,7 +298,7 @@
             (make-model (hash->model state-space lt topo-ht start-state state->representative) lt)]
           ; otherwise, keep going
           [else
-            (search-bfs (add1 depth) states-explored stepper (if dump (sub1 dump) #f) state-space new-fringe)])]))
+            (search-bfs start-state (add1 depth) states-explored stepper (if dump (sub1 dump) #f) state-space new-fringe unsat)])]))
 
 
 ;;;;;;;;;;;;;;;;; end search ;;;;;;;;;;;;;;;;;;
@@ -346,7 +325,7 @@
 ;#((#(struct:mprocess 6 ())) (#(2 4 7 3)))
 ;#((#(struct:mprocess 8 ())) (#(4 1 9 1)))
 ;#((#(struct:mprocess 4 ())) (#(2 1 5 1))))
-(define (search-node state states-explored)
+(define (search-node state states-explored stepper unsat)
   ; try to fit state as 1e position index
   (define (try-fit state index eq-map)
     ; update max-trace
@@ -380,11 +359,33 @@
           (if (member (list) possible-list) 
               #f 
               possible-list))
+
+        ; return a list of *all* states reachable without using a transition in proc-mask
+        ;  (including the passed state)
+        (define (explode state proc-mask)
+          ; add start state to collection and fringe
+          (let explode-rec ([collection (make-hash (list (cons state (void))))]
+                            [fringe (make-hash (list (cons state (void))))]
+                            [proc-mask proc-mask]) 
+
+            (define new-fringe (make-hash))
+
+            (for ([x (in-hash-keys fringe)])
+              (for ([y (stepper x proc-mask)])   
+                (define z (state->representative y))
+                (unless (hash-has-key? collection z)
+                  ;; add to new fringe and collection
+                  (hash-set! collection z #t)
+                  (hash-set! new-fringe z #t))))
+
+            (if (= 0 (hash-count new-fringe)) 
+                (hash-map collection (lambda (x y) x))
+                (explode-rec collection new-fringe proc-mask))))
+
         ; first collect all states reachable via tau transitions
         (define starts (explode state pp-ids))
         ; then collect all the proc-type transitions possible from the start set
         (define possibles 
-                    ;(list-of-lists->list (map (lambda (x) (expand x other-mask-ids #t)) starts))]
                     (list-of-lists->list (map (lambda (x) (expand x npp-ids #t)) starts)))
 
         ; finally sort the transitions according to the needed 1e transitions
@@ -430,25 +431,25 @@
         (cons-to-hash unsat state index) 
         #f)
       (else
-          ; test the first element in the first slot
-          (let* ([next-state (todo->next-state (caar check-list))]
-                 [next-index (vector-ref (car oneE-list) 3)]
-                 [res (try-fit next-state next-index eq-map)])
-            (if res 
-                ; the next state works... now add the link between its parent and it
-              (let* ([entry (vector-ref res index)]
-                     [to-change (if (assoc state entry) (assoc state entry) 
-                                              (error "fit-children: logic error: original state entry not found"))]
-                     [new-entry-element (list state 
-                                      (cons (list (caar check-list) next-index) (cadr to-change)))]
-                     [new-entry (cons new-entry-element (remove to-change entry))]
-                     [dummy0 (vector-set! res index new-entry)])
+        ; test the first element in the first slot
+        (define next-state (todo->next-state (caar check-list)))
+        (define next-index (vector-ref (car oneE-list) 3))
+        (define-values (res) (try-fit next-state next-index eq-map))
+        (if res 
+            ; the next state works... now add the link between its parent and it
+          (let* ([entry (vector-ref res index)]
+                 [to-change (if (assoc state entry) (assoc state entry) 
+                                          (error "fit-children: logic error: original state entry not found"))]
+                 [new-entry-element (list state 
+                                  (cons (list (caar check-list) next-index) (cadr to-change)))]
+                 [new-entry (cons new-entry-element (remove to-change entry))]
+                 [dummy0 (vector-set! res index new-entry)])
 
-              ; continue the call
-              (fit-children state (cdr check-list) (cdr oneE-list) res index))
+            ; continue the call
+            (fit-children state (cdr check-list) (cdr oneE-list) res index))
 
-              ; if failed, recurse on this sublist of the check-list
-              (fit-children state (cons (cdar check-list) (cdr check-list)) oneE-list eq-map index))))))
+          ; if failed, recurse on this sublist of the check-list
+          (fit-children state (cons (cdar check-list) (cdr check-list)) oneE-list eq-map index)))))
 
 
 
@@ -460,32 +461,6 @@
     [else 
       (define eq-map (make-vector (vector-length oneE) (list)))
       (try-fit state 0 eq-map)]))
-
-
-
-
-
-
- ; return a list of *all* states reachable without using a transition in proc-mask
- ;  (including the passed state)
-(define (explode state proc-mask)
-  ; add start state to collection and fringe
-  (let explode-rec ([collection (make-hash (list (cons state (void))))]
-                    [fringe (make-hash (list (cons state (void))))]
-                    [proc-mask proc-mask]) 
-
-    (define new-fringe (make-hash))
-
-    (for ([x (in-hash-keys fringe)])
-      (for ([y (expand x proc-mask)])
-        (unless (hash-has-key? collection y)
-          ;; add to new fringe and collection
-          (hash-set! collection y #t)
-          (hash-set! new-fringe y #t))))
-
-    (if (= 0 (hash-count new-fringe)) 
-        (hash-map collection (lambda (x y) x))
-        (explode-rec collection new-fringe proc-mask))))
 
 ; ================================== solution visualization ===================================== ;
 
