@@ -11,7 +11,8 @@
 #lang scheme
   
   ;; find-k: (amf-filename options-list) -> () : <dumps solution to file>
-  (provide find-k)
+  (provide find-k
+           find-k-places)
   
   ;; for various utility functions
   (require "datatypes.scm")
@@ -41,7 +42,9 @@
   ;; search: (protocol topology proc-type ...) -> (values #t vector-model) | (values #f max-trace-integer)
   (require "search.scm")
 (require "macros.rkt"
-         "globals.rkt")
+         "globals.rkt"
+         "place-channel-param.rkt"
+         racket/place)
 
 
 ;;; internals ;;;
@@ -237,3 +240,7 @@
 (define (strip-folder x)
   (define-values (dir-path file dir?) (split-path x))
   (path->string file))
+
+(define (find-k-places ch)
+  (parameterize ([pch ch])
+    (find-k (place-channel-get ch))))

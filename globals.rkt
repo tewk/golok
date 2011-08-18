@@ -33,4 +33,4 @@
 (define-global stop-depth #f)       ; stop at depth ; TODO: not implemented
 (define-global process-type #f)     ; name of process type to check
 (define-global pruning #t)          ; branch pruning
-(define-global isplace #f)          ; is this a worker place
+(define-global places #f)           ; is this a worker place

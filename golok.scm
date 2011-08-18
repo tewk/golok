@@ -35,6 +35,7 @@ be a positive number, given" num)))]
   [("-s" "--stop-depth") x "Depth to halt simulation search" (set!-stop-depth (string->number x))]
   [("-p" "--process-type") x "Search only for a specific process" (set!-process-type (string->symbol x))]
   [("--disable-pruning") "for testing only" (set!-pruning #f)]
+  [("--places") "use places for searching" (set!-places #t)]
 
    #:args (amf-file)  amf-file ))
 
