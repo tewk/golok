@@ -29,12 +29,6 @@
 ;; maximum trace
 (define max-trace 0)
 
-;; the expand function 
-;;
-;; returns all possible new states
-;; (state) -> (list-of state)
-(define expand (void))
-
 ;; function which maps a system state to a specific representative (~ is partial order reduction)
 ;;
 ;; (state? hash-map?) -> (state?)
@@ -126,27 +120,6 @@
 
   ;; add wrapper around the expand function 
   ;; which handles state reduction
-  (define (expand-toi state to-list [proc-mask (list)] [to-todos? #f])
-    (if to-todos?
-        ;; repackage all the todos to have reduces representation
-        (for/fold ([tol to-list]) ([td (stepper state proc-mask #t)])
-          (define s1 (state->representative (todo-state td)))
-          (define s2 (state->representative (todo->next-state td)))
-          (cons
-            (make-todo s1 (todo-msg td)
-                          (todo-send-id td)
-                          (todo-recv-id td)
-                          (todo-cons-state td)
-                          (todo-msg2 td)
-                          s2)
-            tol))
-        ;; otherwise, just map all the returned states
-        (for/fold ([tol to-list]) ([x (stepper state proc-mask)])
-          (cons (state->representative x) tol))))
-
-  (set! expand 
-         (lambda (state [proc-mask (list)] [to-todos? #f])
-           (reverse (expand-toi state null proc-mask to-todos?))))
 
   (define start-aut (state->state-id (vector proc-type (automaton-state1 (process-default-aut (car 
                         (filter (lambda (x) (equal? proc-type (process-name x)))
@@ -184,7 +157,7 @@
           (begin
           ;(display-ln "This is simulating done" (vector-length result) "\n")
           (display-ln "The number of explored states is " (hash-count states-explored) "\n")
-          (values #t (search->model result lookup-table topo-hash pp-ids)))]
+          (values #t (search->model result stepper lookup-table topo-hash pp-ids)))]
         ; otherwise just return failure
         [else
           (when (and (not dfs) dump)
@@ -369,7 +342,10 @@
         (define starts (explode state pp-ids))
         ; then collect all the proc-type transitions possible from the start set
         (define possibles 
-                    (list-of-lists->list (map (lambda (x) (expand x npp-ids #t)) starts)))
+          (reverse 
+            (for/fold ([tol null]) ([state starts])
+              (for/fold ([tol tol]) ([td (stepper state npp-ids #t)])
+                (cons (todo->new-todo td) tol)))))
 
         ; finally sort the transitions according to the needed 1e transitions
         (define check-list (condense possibles index))
@@ -448,13 +424,13 @@
 ; ================================== solution visualization ===================================== ;
 
 ; converts search results (for proc-type)  to standard model output
-(define (search->model results lt topo-ht pp-ids)
+(define (search->model results stepper lt topo-ht pp-ids)
   (define db (make-hash))
   ; puts all states mentioned in the search result into the db
   (define (add-all-states res)
     (for ([x (in-vector res)])
       (for ([y x])
-        (process-entry! y db pp-ids))))
+        (process-entry! y db stepper pp-ids))))
 
   (add-all-states results)
   ; pass the first state of simulation
@@ -475,7 +451,7 @@
 ; (so if start-state is not equal to todo-state, there is a tau link between them,
 ; and the transition from todo-state to todo->next-state is of this process type)
 ;
-(define (process-entry! entry db pp-ids)
+(define (process-entry! entry db stepper pp-ids)
   (define start-state (car entry))
   ; ensure start-state is in the db
   (define ss-id (get-id start-state db))
@@ -488,7 +464,7 @@
     ; if start-state does not equal the initial state of the proc-type transition,
     ; then at least one tau transition needed to happen, first
     (when (not (equal? start-state (todo-state td)))
-        (connect-taus! start-state (todo-state td) db pp-ids))
+        (connect-taus! start-state (todo-state td) db stepper pp-ids))
      (add-td-to-db! td db)))
 
 (define (add-td-to-db! td db)
@@ -514,7 +490,7 @@
 
 ;; adds all intermediate states from start-state to end-state 
 ;; (using tau transitions)
-(define (connect-taus! start-state end-state db pp-ids) 
+(define (connect-taus! start-state end-state db stepper pp-ids) 
   ;We want to check if, after going through all tau-transitions from start-state to children
   ;if we are going to reach the end-state
   ; dummy check
@@ -524,16 +500,16 @@
       (define end-db (make-hash))
       (when (>= debug 4) (display-ln "Start is "start-state " and end is "end-state "\n"))
       (hash-set! end-db (state->representative end-state) #t)
-      (define possibles (remove-duplicates (expand start-state pp-ids #t)))
+      (define possibles (remove-duplicates (for/list ([x (stepper start-state pp-ids #t)]) (todo->new-todo x))))
       ; since there *is* a path to the end-state, this ormap always gives a non #f result
       ; if it *does* return false, there is an error in our search algorithm
-      (or (for/or ([x possibles]) (connect-taus-rec x end-db db (make-hash) pp-ids))
+      (or (for/or ([x possibles]) (connect-taus-rec x end-db db (make-hash) stepper pp-ids))
           (error "there is a bug in search!"))]))
 
 ; returns a list or #f: #f on failure or (list todo final-state)
 ;     the todo which started this level and the final edge state
 ; (we need to return the first state of final-todo)
-(define (connect-taus-rec init-td final-db db visited pp-ids)
+(define (connect-taus-rec init-td final-db db visited stepper pp-ids)
   (define start-state (todo-state init-td))
   (define end-state (todo->next-state init-td))
   (when (>= debug 4)  (display-ln "ctr call:\n\tss: " start-state "\n\tes: " end-state"\n\n\n"))
@@ -546,7 +522,7 @@
     ;; add all generated todos to done-db and filter out todos that were previously there
     [else 
       (define possibles ;(filter (lambda (x) (if (hash-has-key? done-db x) #f #t))
-                              (expand end-state pp-ids #t))
+                              (for/list ([x (stepper end-state pp-ids #t)]) (todo->new-todo x)))
       (when (>= debug 4) (display-ln "possibles for connect-taus-rec: " possibles))
       (cond 
         [(null? possibles) #f]
@@ -559,7 +535,7 @@
                               #t)
                             (begin
                               (hash-set! visited end-state #f)
-                              (connect-taus-rec x final-db db visited pp-ids)))))
+                              (connect-taus-rec x final-db db visited stepper pp-ids)))))
 
           ; if one of our children found the solution, add its transition and return
           (if res
