@@ -26,20 +26,14 @@
 ;;;;;;;;;;;;;;;;;;;;
 ; global variables ;
 
-;; 1E model as labeled-transition directed graph
-(define oneE (void))
-
 ;; maximum trace
 (define max-trace 0)
-
-
 
 ;; the expand function 
 ;;
 ;; returns all possible new states
 ;; (state) -> (list-of state)
 (define expand (void))
-
 
 ;; function which maps a system state to a specific representative (~ is partial order reduction)
 ;;
@@ -50,12 +44,6 @@
 ;; TODO: implement this (since we changed to state-based instead of 
 ;;            automaton-based representation, this is harder to do)
 (define sim-filter (void))
-
-; lookup table
-(define lt #f)
-
-; topology
-(define topo-ht #f)
 
 ;; debug value
 
@@ -83,7 +71,7 @@
                 (todo-msg2 td)
                 s2))
 
-(define-struct search-helper-state (start-state-filter npp-ids pp-ids) #:prefab)
+(define-struct search-helper-state (start-state-filter npp-ids pp-ids state->representative) #:prefab)
 
 ;;; search function and small helper functions ;;;
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
@@ -139,11 +127,6 @@
   ; set a bunch of global (to this module) variables
   (define start-state (state->representative ss))
 
-  ; XXX: cleanup
-  (set! lt lookup-table)
-  (set! topo-ht topo-hash)
-   
-
   ; TODO: set up branch pruning
 
   ;; add wrapper around the expand function 
@@ -172,7 +155,7 @@
 
   (define start-aut (state->state-id (vector proc-type (automaton-state1 (process-default-aut (car 
                         (filter (lambda (x) (equal? proc-type (process-name x)))
-                                          (protocol-processes prot)))))) lt))
+                                          (protocol-processes prot)))))) lookup-table))
   (define (start-aut-filter lst)
     (for/or ([x lst]) (= start-aut (mprocess-state x))))
 
@@ -180,11 +163,12 @@
   (set! start-state-filter (if pr start-aut-filter (lambda (x) #t)))
  
   
-  (let-values ([(fresh-tt builder) (build-oneEmodel-builder prot)])
-;    (pretty-print fresh-tt)
-    (set! oneE (model-mdl (builder proc-type oneE-start-aut npp-ids))))
+  (define-values (oneE-lt oneE-builder) (build-oneEmodel-builder prot))
+;  (pretty-print oneE-lt)
+  ;; 1E model as labeled-transition directed graph
+  (define oneE-model (model-mdl (oneE-builder proc-type oneE-start-aut npp-ids)))
 ;  (pretty-print lookup-table)
-;  (pretty-print oneE)
+;  (pretty-print oneE-model)
   
   ; debugging messages
   (when (>= debug 2) (display-ln "checking " (topology->string topo) " for simulation of " proc-type))
@@ -194,29 +178,31 @@
   
   ; result is either a simulating subset model or false
   (define states-explored (make-hash))
-  (let ([result (if dfs (search-dfs start-state stepper) 
-                        (search-bfs start-state 0 states-explored stepper dump))])
+  (define state-space (make-hash))
+  (let ([result (if dfs (search-dfs start-state stepper oneE-model) 
+                        (search-bfs start-state 0 states-explored stepper oneE-model dump state-space))])
     (cond 
-      ((and (not (equal? #f dump)) (model? result))
-        (begin
-           (display-ln "dumping (did NOT really find simulation)")
-            (values #t result)))
-      (result
+      [(and (not (equal? #f dump)) (model? result))
+        (display-ln "dumping (did NOT really find simulation)")
+        (values #t result)]
+      [result
           (begin
           ;(display-ln "This is simulating done" (vector-length result) "\n")
           (display-ln "The number of explored states is " (hash-count states-explored) "\n")
-          (values #t (search->model result))))
+          (values #t (search->model result lookup-table topo-hash)))]
         ; otherwise just return failure
-        (#t
-          (values #f max-trace)))))
+        [else
+          (when (and (not dfs) dump)
+            (make-model (hash->model state-space lookup-table topo-hash start-state state->representative) lookup-table))
+          (values #f max-trace)])))
 
-(define (search-dfs state stepper [store (make-hash)] [unsat (make-hash)])
+(define (search-dfs state stepper oneE-model [store (make-hash)] [unsat (make-hash)])
   (when (zero? (modulo (hash-count store) 100)) 
     (display-ln "\t" (hash-count store) " states checked and " (hash-count unsat) " in unsat" ))
   (cond
     [(hash-has-key? store state) #f]
     [else
-      (define ans (search-node state (make-hash) stepper unsat))
+      (define ans (search-node state (make-hash) stepper unsat oneE-model))
       ; if we found an answer, just return it
       ; otherwise, check children
       (cond
@@ -228,7 +214,7 @@
               [(and (not (hash-has-key? store z))
                          (start-state-filter z))
                 (hash-set! store state #t)
-                (search-dfs z stepper store unsat)]
+                (search-dfs z stepper store unsat oneE-model)]
               [else #f]))])]))
         
 ; search state space with BFS
@@ -236,8 +222,9 @@
                     depth 
                     states-explored 
                     stepper 
-                    [dump #f] 
-                    [state-space (make-hash)] 
+                    oneE-model
+                    dump
+                    state-space
                     [fringe (make-hash)]
                     [unsat (make-hash)])
     (define (get-fringe depth state-space fringe)
@@ -281,24 +268,23 @@
 
     (cond 
       ; there are no more states to search
-      [(not new-fringe)
-        (if dump
-            (make-model (hash->model state-space lt topo-ht start-state state->representative) lt)
-            #f)]
+      [(not new-fringe) #f]
       [else
         ; check if some fringe node is the start of 1e simulating chunk
         (define sim (for/or ([x (in-hash-keys new-fringe)]) 
                             ;(printf "SN ~a\n" x)
-                            (search-node x (make-hash) stepper (make-hash))))
+                            (search-node x (make-hash) stepper (make-hash) oneE-model)))
         (cond 
           ; if we found a solution, return it
           [sim sim]
           ; are we just dumping output?
           [(and dump (= 0 dump)) 
-            (make-model (hash->model state-space lt topo-ht start-state state->representative) lt)]
+            (raise "Move this functionality to search")]
+            ;(make-model (hash->model state-space lt topo-ht start-state state->representative) lt)]
           ; otherwise, keep going
           [else
-            (search-bfs start-state (add1 depth) states-explored stepper (if dump (sub1 dump) #f) state-space new-fringe unsat)])]))
+            (search-bfs start-state (add1 depth) states-explored stepper oneE-model
+                        (if dump (sub1 dump) #f) state-space new-fringe unsat)])]))
 
 
 ;;;;;;;;;;;;;;;;; end search ;;;;;;;;;;;;;;;;;;
@@ -325,7 +311,7 @@
 ;#((#(struct:mprocess 6 ())) (#(2 4 7 3)))
 ;#((#(struct:mprocess 8 ())) (#(4 1 9 1)))
 ;#((#(struct:mprocess 4 ())) (#(2 1 5 1))))
-(define (search-node state states-explored stepper unsat)
+(define (search-node state states-explored stepper unsat oneE-model)
   ; try to fit state as 1e position index
   (define (try-fit state index eq-map)
     ; update max-trace
@@ -344,10 +330,10 @@
       [(member index (hash-ref! unsat state (list))) #f]
       ; otherwise, expan dnd-toiall possible branches
       [else
-        ; condense: (list-of todo, oneE transition index to match) -> #f | (list-of (list-of todo))
+        ; condense: (list-of todo, oneE-model transition index to match) -> #f | (list-of (list-of todo))
         (define (condense todos index)
           (define possible-list
-            (for/list ([x (vector-ref (vector-ref oneE index) 1)])
+            (for/list ([x (vector-ref (vector-ref oneE-model index) 1)])
               (define x0 (vector-ref x 0))
               (define x1 (vector-ref x 1))
               (for/filter ([y todos])
@@ -415,7 +401,7 @@
             (vector-set! new-em index (cons new-entry current))
 
             ; make sure all transitions are simulated recursively
-            (fit-children state check-list (vector-ref (vector-ref oneE index) 1) new-em index)])]))
+            (fit-children state check-list (vector-ref (vector-ref oneE-model index) 1) new-em index)])]))
 
   ; ensure "state"'s children (in check-list) recursively complete the oneE-list of transitions
   ;
@@ -453,19 +439,19 @@
 
 
 
-  ;(pretty-print oneE)
+  ;(pretty-print oneE-model)
   ;(printf "STATE: ~a\n" state)
   (cond 
     ; fail fast if already in unsat map
     [(member 0 (hash-ref! unsat state (list))) #f]
     [else 
-      (define eq-map (make-vector (vector-length oneE) (list)))
+      (define eq-map (make-vector (vector-length oneE-model) (list)))
       (try-fit state 0 eq-map)]))
 
 ; ================================== solution visualization ===================================== ;
 
 ; converts search results (for proc-type)  to standard model output
-(define (search->model results)
+(define (search->model results lt topo-ht)
   (define db (make-hash))
   ; puts all states mentioned in the search result into the db
   (define (add-all-states res)
