@@ -154,7 +154,7 @@
     (cond 
       [places
       (define pc (struct-copy protocol prot [addition-rules #f]))
-        (for/list ([i (processor-count)])
+        (for/list ([i 4 #;(processor-count)])
           (define p (place ch
             (match-define (list prot topo pp-ids npp-ids proc-type oneE-start-aut) (place-channel-get ch))
             (define-values (stepper ss lookup-table topo-hash) (init-stepper prot topo))
