@@ -6,7 +6,7 @@
 ; Sept. 5, 2009
 ; David Samuelson
 
-#lang scheme
+#lang racket/base
 
 (require "datatypes.scm") ; trans struct type
 (require "parser.scm") ; for process-protocol-names
@@ -17,7 +17,11 @@
 (require "model-builder.scm")
 (require "perm.scm") ; for generate-permutations
 (require "lookup-table.scm") ; for state->state-id
-(require "macros.rkt")
+(require "macros.rkt"
+         (only-in "globals.rkt" places)
+         racket/place
+         racket/match
+         racket/list)
 
 (provide
   ; search: (prot topology proc-type) -> (#t simulating-model) | (#f max-count)
@@ -32,9 +36,9 @@
 ;; function which maps a system state to a specific representative (~ is partial order reduction)
 ;;
 ;; (state? hash-map?) -> (state?)
-(define state->representative (void))
+(define state->representative (lambda (x . y) x))
 
-;; filter for checking a state for simulation (this is a heuristic)
+;; filter f/r checking a state for simulation (this is a heuristic)
 ;; TODO: implement this (since we changed to state-based instead of 
 ;;            automaton-based representation, this is harder to do)
 (define sim-filter (void))
@@ -57,6 +61,11 @@
                 (todo-cons-state td)
                 (todo-msg2 td)
                 s2))
+
+(define (build-oneE-model prot proc-type oneE-start-aut npp-ids)
+  (define-values (oneE-lt oneE-builder) (build-oneEmodel-builder prot))
+  ;; 1E model as labeled-transition directed graph
+  (model-mdl (oneE-builder proc-type oneE-start-aut npp-ids)))
 
 (define-struct search-helper-state (start-state-filter npp-ids pp-ids state->representative) #:prefab)
 
@@ -132,23 +141,41 @@
  
   
   (define-values (oneE-lt oneE-builder) (build-oneEmodel-builder prot))
-;  (pretty-print oneE-lt)
   ;; 1E model as labeled-transition directed graph
   (define oneE-model (model-mdl (oneE-builder proc-type oneE-start-aut npp-ids)))
-;  (pretty-print lookup-table)
-;  (pretty-print oneE-model)
   
   ; debugging messages
   (when (>= debug 2) (display-ln "checking " (topology->string topo) " for simulation of " proc-type))
   (when (and dump dfs) (display-ln "WARNING: using dfs, so ignoring #:dump option " dump))
 
   ; logic starts here
+
+  (define place-workers
+    (cond 
+      [places
+      (define pc (struct-copy protocol prot [addition-rules #f]))
+        (for/list ([i (processor-count)])
+          (define p (place ch
+            (match-define (list prot topo pp-ids npp-ids proc-type oneE-start-aut) (place-channel-get ch))
+            (define-values (stepper ss lookup-table topo-hash) (init-stepper prot topo))
+            (define oneE-model (build-oneE-model prot proc-type oneE-start-aut npp-ids))
+            (let loop ()
+              (define state (place-channel-get ch))
+              (cond 
+                [(equal? state 'DONE) (void)]
+                [else
+                  (define result (search-node state (make-hash) stepper (make-hash) oneE-model pp-ids npp-ids))
+                  (place-channel-put ch result)
+                  (loop)]))))
+          (place-channel-put p (list pc topo pp-ids npp-ids proc-type oneE-start-aut))
+          p)]
+      [else #f]))
   
   ; result is either a simulating subset model or false
   (define states-explored (make-hash))
   (define state-space (make-hash))
   (let ([result (if dfs (search-dfs start-state stepper oneE-model pp-ids npp-ids) 
-                        (search-bfs start-state 0 states-explored stepper oneE-model dump state-space pp-ids npp-ids))])
+                        (search-bfs start-state 0 states-explored stepper oneE-model dump state-space pp-ids npp-ids place-workers))])
     (cond 
       [(and (not (equal? #f dump)) (model? result))
         (display-ln "dumping (did NOT really find simulation)")
@@ -195,6 +222,7 @@
                     state-space
                     pp-ids
                     npp-ids
+                    place-workers
                     [fringe (make-hash)]
                     [unsat (make-hash)])
     (define (get-fringe depth state-space fringe)
@@ -241,9 +269,12 @@
       [(not new-fringe) #f]
       [else
         ; check if some fringe node is the start of 1e simulating chunk
-        (define sim (for/or ([x (in-hash-keys new-fringe)]) 
-                            ;(printf "SN ~a\n" x)
-                            (search-node x (make-hash) stepper (make-hash) oneE-model pp-ids npp-ids)))
+        (define sim 
+          (cond 
+            [place-workers (places-do place-workers (hash-map new-fringe (lambda (x y) x)))]
+            [else
+              (for/or ([x (in-hash-keys new-fringe)]) 
+                (search-node x (make-hash) stepper (make-hash) oneE-model pp-ids npp-ids))]))
         (cond 
           ; if we found a solution, return it
           [sim sim]
@@ -254,8 +285,25 @@
           ; otherwise, keep going
           [else
             (search-bfs start-state (add1 depth) states-explored stepper oneE-model
-                        (if dump (sub1 dump) #f) state-space pp-ids npp-ids new-fringe unsat)])]))
+                        (if dump (sub1 dump) #f) state-space pp-ids npp-ids place-workers new-fringe unsat)])]))
 
+(define (places-do places fringe)
+  (let loop ([places places]
+             [fringe fringe]
+             [waiting null]
+             [ans #f])
+    (match (list places fringe waiting ans)
+      [(list pls fringe (list) (and ans (? values ans))) ans]
+      [(list (cons ph pt) (cons fh ft) waiting ans)
+       (place-channel-put ph fh)
+       (loop pt ft (cons ph waiting) ans)]
+      [(list pls (list) (list) #f) #f]
+      [else
+        (define ws 
+          (for/list ([x waiting])
+            (handle-evt x (lambda (m)
+              (loop (cons x places) fringe (remove x waiting) (or ans m))))))
+        (apply sync ws)])))
 
 ;;;;;;;;;;;;;;;;; end search ;;;;;;;;;;;;;;;;;;
 

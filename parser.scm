@@ -11,6 +11,7 @@
 #lang scheme
   
 (provide
+  (struct-out protocol)
 
   ;; (string?) -> (protocol) : filename of .amf file
   parse-amf-file
@@ -241,9 +242,9 @@
     ;;;    ((node 2))
     ;;;    ((node 0 -- node 1) (node 1 -- node 0))))
 
-    (define-struct protocol (process-names processes addition-rules topo-msgs start-conf kernel) #:transparent)
+    (define-struct protocol (process-names processes addition-rules topo-msgs start-conf kernel) #:prefab)
     
-    (define-struct process (name auts default-aut) #:transparent)
+    (define-struct process (name auts default-aut) #:prefab)
    
     ;; prot -> basic automata
     (define (protocol-behavior-automata prot)

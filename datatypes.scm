@@ -68,7 +68,7 @@
 
 ; state: process state
 ; buff ; list of msgs in output buffer 
-(define-struct mprocess (state buff) #:transparent)
+(define-struct mprocess (state buff) #:prefab)
 
 ;
 ; mdl: vector representation of model
@@ -80,7 +80,7 @@
 ;
 (define-struct model (mdl table) #:transparent)
 
-(define-struct automaton (proc-type name state1 in-msg state2 out-msg) #:transparent)
+(define-struct automaton (proc-type name state1 in-msg state2 out-msg) #:prefab)
 
 ;; create a process wrapper around an automaton
 (define (state->process state) (make-mprocess state '()))

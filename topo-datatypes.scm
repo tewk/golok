@@ -71,7 +71,7 @@
 ;
 ; links: list of tuples of symbols (process-type number link process-type number)
 ;      (e.g.  ((thread 0 -- thread 1) (object 0 -> thread 2)))
-(define-struct topology (model counts links) #:transparent)
+(define-struct topology (model counts links) #:prefab)
 
 (define topology->file
   (lambda (topo filename)

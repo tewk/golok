@@ -92,7 +92,7 @@
 ; recv-id: index of receiving process
 ; cons-state: the new state of the consuming process
 ; msg2: the message produced by the transition
-(define-struct todo (state msg send-id recv-id cons-state msg2 new-state) #:transparent)
+(define-struct todo (state msg send-id recv-id cons-state msg2 new-state) #:prefab)
 
 ;; (for backwards compatibility)
 (define todo->next-state todo-new-state)

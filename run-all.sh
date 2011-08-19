@@ -24,7 +24,7 @@ echo "Testing BFS"
   then
   ./golok -o output --npp buffer examples/$i.amf || fail
   else
-  ./golok -o output examples/$i.amf || fail
+  racket golok.scm --places examples/$i.amf || fail
   fi
  
 #echo "Testing DFS"
