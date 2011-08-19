@@ -8,7 +8,7 @@
 ;; May 28, 2009
 ;;
 
-#lang scheme
+#lang racket/base
   
   ;; find-k: (amf-filename options-list) -> () : <dumps solution to file>
   (provide find-k

@@ -4,7 +4,7 @@
 ;; machinery for generation of oneE and sysN models
 ;;
 
-#lang scheme 
+#lang racket/base
 
 ;;
 ;; build-oneEmodel (list-of-automata) -> model
@@ -59,7 +59,9 @@
 (require "datatypes.scm"
          "lookup-table.scm"
          "parser.scm"
-         "macros.rkt")
+         "macros.rkt"
+         racket/vector
+         racket/list)
 
 
 ;; !!! LOCAL MAGIC VARIABLES !!!

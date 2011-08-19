@@ -11,7 +11,9 @@
 ;; assumption is that no two numbers are the same!
 ;;
 
-#lang scheme
+#lang racket/base
+(require racket/list)
+
 (provide generate-permutations)
 
 ;; general strategy:

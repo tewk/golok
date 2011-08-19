@@ -8,7 +8,7 @@
 ;; 
 
 
-#lang scheme
+#lang racket/base
   
 (provide
   (struct-out protocol)
@@ -45,6 +45,7 @@
   ;; (protocol? topology?) -> (values (list-of process?) vector?)
   instantiate-protocol)
 
+  (require (only-in racket/list drop-right last second third fourth fifth remove-duplicates))
   
   ; for eopl LL(1) parser
   (require  (lib "eopl.ss" "eopl"))

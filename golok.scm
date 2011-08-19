@@ -1,9 +1,10 @@
-#lang scheme
+#lang racket/base
 ;
 ; front-end for calling find-k from the command line
 ; David Samuelson
 ;
-(require "globals.rkt"
+(require racket/cmdline
+         "globals.rkt"
          "find-k.scm")
 
 ; command line parser which sets up environment

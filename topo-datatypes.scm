@@ -4,7 +4,7 @@
 ; datatypes for working with topologies
 ;
 
-#lang scheme
+#lang racket/base
 
 
 (provide
@@ -54,6 +54,7 @@
   ;; (topology? (list-of (symbol? symbol? symbol?))) -> (vector?)
   topology-instantiate)
  
+(require (only-in racket/list drop-right last third fourth fifth remove-duplicates))
 
 ; for sllgen parsing
 (require (lib "eopl.ss" "eopl"))
@@ -62,7 +63,7 @@
 (require "datatypes.scm")
 
 ; for file io
-(require scheme/port)
+(require racket/port)
 
 ; model: string path to the amf file for which this 
 ;        structure represents a particular configuration

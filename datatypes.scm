@@ -7,10 +7,13 @@
 ;; May 19, 2009
 ;;
 
-#lang scheme
+#lang racket/base
 
 ;; for docs
-(require scribble/base scribble/srcdoc)
+(require scribble/base 
+         scribble/srcdoc
+         racket/list)
+
 
 (provide 
         ; behavioral automaton
